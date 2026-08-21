@@ -1,0 +1,1500 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Painel Financeiro Gerencial — Orçamento e Gestão Financeira</title>
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Chart.js CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <!-- FontAwesome CDN -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+    body { font-family: 'Inter', sans-serif; background-color: #f8fafc; color: #0f172a; }
+    .nav-tab.active { background-color: #1e293b; color: #ffffff; border-bottom: 3px solid #3b82f6; }
+    .card-shadow { box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03); }
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: #f1f5f9; }
+    ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
+    @media print {
+      header, nav, .no-print { display: none !important; }
+      body { background-color: white; color: black; }
+      .card-shadow { box-shadow: none !important; border: 1px solid #ccc !important; }
+    }
+  </style>
+</head>
+<body class="min-h-screen flex flex-col">
+
+  <!-- OVERLAY DE CARREGAMENTO -->
+  <div id="loader" class="fixed inset-0 bg-slate-900/80 z-50 flex flex-col items-center justify-center text-white">
+    <div class="animate-spin rounded-full h-12 w-12 border-4 border-blue-500 border-t-transparent mb-4"></div>
+    <p class="text-sm font-semibold tracking-wide" id="loader-msg">Carregando dados do Google Sheets...</p>
+  </div>
+
+  <!-- TOP HEADER -->
+  <header class="bg-slate-900 text-white shadow-lg sticky top-0 z-40 no-print">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3 flex flex-wrap justify-between items-center gap-4">
+      <div class="flex items-center space-x-3">
+        <div class="p-2.5 bg-blue-600 rounded-xl shadow-md"><i class="fa-solid fa-chart-pie text-2xl"></i></div>
+        <div>
+          <h1 class="text-xl font-extrabold tracking-tight">Painel Financeiro Gerencial</h1>
+          <p class="text-xs text-slate-400 font-medium">Orçamento e Gestão Financeira</p>
+        </div>
+      </div>
+
+      <!-- FILTROS GLOBAIS DA BASE REAL -->
+      <div class="flex flex-wrap items-center gap-3">
+        <div>
+          <label class="block text-[10px] uppercase font-bold text-slate-400 mb-0.5">Empresa</label>
+          <select id="filterEmpresa" onchange="updateDashboard()" class="bg-slate-800 text-white text-xs rounded-md px-3 py-1.5 border border-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500 font-medium">
+            <option value="TODAS">Todas as Empresas</option>
+          </select>
+        </div>
+
+        <div>
+          <label class="block text-[10px] uppercase font-bold text-slate-400 mb-0.5">Período Inicial</label>
+          <select id="filterMesStart" onchange="updateDashboard()" class="bg-slate-800 text-white text-xs rounded-md px-3 py-1.5 border border-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500 font-medium">
+          </select>
+        </div>
+
+        <div>
+          <label class="block text-[10px] uppercase font-bold text-slate-400 mb-0.5">Período Final</label>
+          <select id="filterMesEnd" onchange="updateDashboard()" class="bg-slate-800 text-white text-xs rounded-md px-3 py-1.5 border border-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500 font-medium">
+          </select>
+        </div>
+
+        <div class="self-end">
+          <button onclick="resetFilters()" class="bg-slate-700 hover:bg-slate-600 text-white text-xs px-3 py-1.5 rounded-md transition flex items-center gap-1.5 font-medium">
+            <i class="fa-solid fa-rotate-left text-xs"></i> Limpar filtros
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- NAVEGAÇÃO PRINCIPAL -->
+    <div class="bg-slate-800 border-t border-slate-700">
+      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex space-x-1 overflow-x-auto">
+        <button onclick="switchTab('executiva')" id="tab-executiva" class="nav-tab active px-4 py-2.5 text-xs font-semibold flex items-center gap-2 transition">
+          <i class="fa-solid fa-gauge-high"></i> Visão Executiva
+        </button>
+        <button onclick="switchTab('dre')" id="tab-dre" class="nav-tab px-4 py-2.5 text-xs font-semibold text-slate-300 hover:text-white flex items-center gap-2 transition">
+          <i class="fa-solid fa-file-invoice-dollar"></i> DRE Gerencial
+        </button>
+        <button onclick="switchTab('dfc')" id="tab-dfc" class="nav-tab px-4 py-2.5 text-xs font-semibold text-slate-300 hover:text-white flex items-center gap-2 transition">
+          <i class="fa-solid fa-money-bill-transfer"></i> Fluxo de Caixa Gerencial
+        </button>
+        <button onclick="switchTab('categorias')" id="tab-categorias" class="nav-tab px-4 py-2.5 text-xs font-semibold text-slate-300 hover:text-white flex items-center gap-2 transition">
+          <i class="fa-solid fa-sitemap"></i> Análise de Categorias
+        </button>
+        <button onclick="switchTab('tendencias')" id="tab-tendencias" class="nav-tab px-4 py-2.5 text-xs font-semibold text-slate-300 hover:text-white flex items-center gap-2 transition">
+          <i class="fa-solid fa-chart-line"></i> Tendências e Sazonalidade
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- PAINEL PRINCIPAL -->
+  <main class="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6">
+
+    <!-- TELA 1 — VISÃO EXECUTIVA -->
+    <div id="page-executiva" class="space-y-6">
+      
+      <!-- KPIS PRINCIPAIS -->
+      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <!-- Receita Bruta -->
+        <div class="bg-white rounded-xl p-5 border border-slate-200 card-shadow">
+          <div class="flex justify-between items-start">
+            <div>
+              <p class="text-[11px] font-bold uppercase tracking-wider text-slate-500">Receita Bruta</p>
+              <h3 id="kpi-rec-real" class="text-2xl font-extrabold text-slate-900 mt-1">R$ 0,00</h3>
+            </div>
+            <div class="p-2.5 bg-blue-50 text-blue-600 rounded-lg"><i class="fa-solid fa-sack-dollar text-lg"></i></div>
+          </div>
+          <div class="mt-3 pt-3 border-t border-slate-100 flex items-center justify-between text-xs">
+            <span class="text-slate-500">Orçado: <strong id="kpi-rec-orc">R$ 0,00</strong></span>
+            <span id="kpi-rec-desvio" class="font-bold px-2 py-0.5 rounded-full text-[11px]">0,0%</span>
+          </div>
+        </div>
+
+        <!-- EBITDA Operacional -->
+        <div class="bg-white rounded-xl p-5 border border-slate-200 card-shadow">
+          <div class="flex justify-between items-start">
+            <div>
+              <p class="text-[11px] font-bold uppercase tracking-wider text-slate-500">EBITDA Operacional</p>
+              <h3 id="kpi-ebitda-real" class="text-2xl font-extrabold text-slate-900 mt-1">R$ 0,00</h3>
+            </div>
+            <div class="p-2.5 bg-emerald-50 text-emerald-600 rounded-lg"><i class="fa-solid fa-money-bill-trend-up text-lg"></i></div>
+          </div>
+          <div class="mt-3 pt-3 border-t border-slate-100 flex items-center justify-between text-xs">
+            <span class="text-slate-500">Orçado: <strong id="kpi-ebitda-orc">R$ 0,00</strong></span>
+            <span id="kpi-ebitda-desvio" class="font-bold px-2 py-0.5 rounded-full text-[11px]">0,0%</span>
+          </div>
+        </div>
+
+        <!-- Lucro Líquido -->
+        <div class="bg-white rounded-xl p-5 border border-slate-200 card-shadow">
+          <div class="flex justify-between items-start">
+            <div>
+              <p class="text-[11px] font-bold uppercase tracking-wider text-slate-500">Lucro Líquido</p>
+              <h3 id="kpi-ll-real" class="text-2xl font-extrabold text-slate-900 mt-1">R$ 0,00</h3>
+            </div>
+            <div class="p-2.5 bg-indigo-50 text-indigo-600 rounded-lg"><i class="fa-solid fa-coins text-lg"></i></div>
+          </div>
+          <div class="mt-3 pt-3 border-t border-slate-100 flex items-center justify-between text-xs">
+            <span class="text-slate-500">Orçado: <strong id="kpi-ll-orc">R$ 0,00</strong></span>
+            <span id="kpi-ll-desvio" class="font-bold px-2 py-0.5 rounded-full text-[11px]">0,0%</span>
+          </div>
+        </div>
+
+        <!-- Geração Líquida de Caixa -->
+        <div class="bg-white rounded-xl p-5 border border-slate-200 card-shadow">
+          <div class="flex justify-between items-start">
+            <div>
+              <p class="text-[11px] font-bold uppercase tracking-wider text-slate-500">Geração Líquida Caixa</p>
+              <h3 id="kpi-caixa-geracao" class="text-2xl font-extrabold text-slate-900 mt-1">R$ 0,00</h3>
+            </div>
+            <div class="p-2.5 bg-amber-50 text-amber-600 rounded-lg"><i class="fa-solid fa-vault text-lg"></i></div>
+          </div>
+          <div class="mt-3 pt-3 border-t border-slate-100 flex items-center justify-between text-xs">
+            <span class="text-slate-500">Regime de Caixa</span>
+            <span id="kpi-caixa-status" class="font-bold text-emerald-600">Entradas > Saídas</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- KPIS SECUNDÁRIOS -->
+      <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+        <div class="bg-white rounded-lg p-3 border border-slate-200 card-shadow text-center">
+          <p class="text-[10px] font-bold uppercase text-slate-400">Margem Bruta</p>
+          <p id="sec-m-bruta" class="text-base font-extrabold text-slate-800 mt-0.5">0,0%</p>
+        </div>
+        <div class="bg-white rounded-lg p-3 border border-slate-200 card-shadow text-center">
+          <p class="text-[10px] font-bold uppercase text-slate-400">Margem EBITDA</p>
+          <p id="sec-m-ebitda" class="text-base font-extrabold text-slate-800 mt-0.5">0,0%</p>
+        </div>
+        <div class="bg-white rounded-lg p-3 border border-slate-200 card-shadow text-center">
+          <p class="text-[10px] font-bold uppercase text-slate-400">Margem Líquida</p>
+          <p id="sec-m-liquida" class="text-base font-extrabold text-slate-800 mt-0.5">0,0%</p>
+        </div>
+        <div class="bg-white rounded-lg p-3 border border-slate-200 card-shadow text-center">
+          <p class="text-[10px] font-bold uppercase text-slate-400">Despesas Fin.</p>
+          <p id="sec-desp-fin" class="text-base font-extrabold text-rose-600 mt-0.5">R$ 0,00</p>
+        </div>
+        <div class="bg-white rounded-lg p-3 border border-slate-200 card-shadow text-center">
+          <p class="text-[10px] font-bold uppercase text-slate-400">Distrib. Lucros</p>
+          <p id="sec-dl" class="text-base font-extrabold text-indigo-600 mt-0.5">R$ 0,00</p>
+        </div>
+        <div class="bg-white rounded-lg p-3 border border-slate-200 card-shadow text-center">
+          <p class="text-[10px] font-bold uppercase text-slate-400">Lucro após DL</p>
+          <p id="sec-ladl" class="text-base font-extrabold text-emerald-600 mt-0.5">R$ 0,00</p>
+        </div>
+      </div>
+
+      <!-- GRÁFICOS EXECUTIVOS -->
+      <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <!-- DRE Orçado x Realizado -->
+        <div class="bg-white rounded-xl p-5 border border-slate-200 card-shadow">
+          <div class="flex justify-between items-center mb-4">
+            <div>
+              <h3 class="text-sm font-bold text-slate-800">DRE: Orçado vs. Realizado</h3>
+              <p class="text-xs text-slate-500">Visão acumulada do período</p>
+            </div>
+            <span class="text-[10px] bg-slate-100 text-slate-600 px-2 py-0.5 rounded font-bold uppercase">Competência</span>
+          </div>
+          <div class="h-64"><canvas id="chartExecDRE"></canvas></div>
+        </div>
+
+        <!-- Evolução da Receita -->
+        <div class="bg-white rounded-xl p-5 border border-slate-200 card-shadow">
+          <div class="mb-4">
+            <h3 class="text-sm font-bold text-slate-800">Evolução da Receita Bruta</h3>
+            <p class="text-xs text-slate-500">Trajetória mensal orçada vs realizada</p>
+          </div>
+          <div class="h-64"><canvas id="chartExecRecTrend"></canvas></div>
+        </div>
+
+        <!-- Evolução EBITDA -->
+        <div class="bg-white rounded-xl p-5 border border-slate-200 card-shadow">
+          <div class="mb-4">
+            <h3 class="text-sm font-bold text-slate-800">Evolução do EBITDA Operacional</h3>
+            <p class="text-xs text-slate-500">Trajetória mensal do resultado operacional</p>
+          </div>
+          <div class="h-64"><canvas id="chartExecEbitdaTrend"></canvas></div>
+        </div>
+      </div>
+
+      <!-- ALERTAS GERENCIAIS AUTOMÁTICOS -->
+      <div class="bg-slate-900 rounded-xl p-5 text-white shadow-lg border border-slate-800">
+        <div class="flex items-center gap-2 mb-3">
+          <i class="fa-solid fa-triangle-exclamation text-amber-400 text-base"></i>
+          <h3 class="text-xs font-bold uppercase tracking-wider text-amber-400">Principais Alertas Gerenciais (Algoritmo Automático)</h3>
+        </div>
+        <div id="alertsContainer" class="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs leading-relaxed">
+          <!-- Populado dinamicamente via JS -->
+        </div>
+      </div>
+    </div>
+
+    <!-- TELA 2 — DRE GERENCIAL -->
+    <div id="page-dre" class="hidden space-y-6">
+      <div class="bg-white rounded-xl p-5 border border-slate-200 card-shadow">
+        <div class="flex flex-wrap justify-between items-center mb-4 gap-3">
+          <div>
+            <h3 class="text-base font-bold text-slate-800">Demonstração do Resultado do Exercício (DRE Gerencial)</h3>
+            <p class="text-xs text-slate-500">Demonstração pelo Regime de Competência conforme a Memória de Cálculo</p>
+          </div>
+          <div class="flex items-center gap-2 no-print">
+            <button onclick="toggleDREMode('sintetica')" id="btnDRESintetica" class="bg-slate-900 text-white text-xs px-3 py-1.5 rounded-md font-medium transition">Sintética</button>
+            <button onclick="toggleDREMode('detalhada')" id="btnDREDetalhada" class="bg-slate-100 text-slate-700 text-xs px-3 py-1.5 rounded-md font-medium hover:bg-slate-200 transition">Detalhada (Expansível)</button>
+            <button onclick="window.print()" class="bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs px-3 py-1.5 rounded-md transition font-medium flex items-center gap-1.5">
+              <i class="fa-solid fa-print"></i> Imprimir / PDF
+            </button>
+          </div>
+        </div>
+
+        <div class="overflow-x-auto">
+          <table class="w-full text-xs text-left border-collapse">
+            <thead>
+              <tr class="bg-slate-900 text-white uppercase text-[11px] tracking-wider">
+                <th class="py-3 px-4 rounded-l-lg">Estrutura DRE</th>
+                <th class="py-3 px-4 text-right">Orçado (R$)</th>
+                <th class="py-3 px-4 text-right">Realizado (R$)</th>
+                <th class="py-3 px-4 text-right">Desvio (R$)</th>
+                <th class="py-3 px-4 text-center rounded-r-lg">Desvio (%) / Status</th>
+              </tr>
+            </thead>
+            <tbody id="tableDREBody" class="divide-y divide-slate-100 font-medium"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- TELA 3 — FLUXO DE CAIXA GERENCIAL -->
+    <div id="page-dfc" class="hidden space-y-6">
+      
+      <!-- CARDS DFC -->
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div class="p-4 bg-emerald-50 rounded-xl border border-emerald-100 card-shadow">
+          <div class="flex justify-between items-center">
+            <span class="text-xs text-emerald-700 font-extrabold uppercase tracking-wider">Total de Entradas</span>
+            <i class="fa-solid fa-arrow-down-left text-emerald-600 text-lg"></i>
+          </div>
+          <h4 id="dfc-entradas" class="text-2xl font-extrabold text-emerald-900 mt-2">R$ 0,00</h4>
+          <p class="text-[11px] text-emerald-600 mt-1">Caixa efetivamente recebido</p>
+        </div>
+        <div class="p-4 bg-rose-50 rounded-xl border border-rose-100 card-shadow">
+          <div class="flex justify-between items-center">
+            <span class="text-xs text-rose-700 font-extrabold uppercase tracking-wider">Total de Saídas</span>
+            <i class="fa-solid fa-arrow-up-right text-rose-600 text-lg"></i>
+          </div>
+          <h4 id="dfc-saidas" class="text-2xl font-extrabold text-rose-900 mt-2">R$ 0,00</h4>
+          <p class="text-[11px] text-rose-600 mt-1">Caixa efetivamente pago</p>
+        </div>
+        <div class="p-4 bg-slate-50 rounded-xl border border-slate-200 card-shadow">
+          <div class="flex justify-between items-center">
+            <span class="text-xs text-slate-700 font-extrabold uppercase tracking-wider">Geração Líquida</span>
+            <i class="fa-solid fa-scale-balanced text-slate-600 text-lg"></i>
+          </div>
+          <h4 id="dfc-geracao" class="text-2xl font-extrabold text-slate-900 mt-2">R$ 0,00</h4>
+          <p class="text-[11px] text-slate-500 mt-1">Saldo financeiro das operações</p>
+        </div>
+      </div>
+
+      <!-- GRÁFICO DFC MENSAL -->
+      <div class="bg-white rounded-xl p-5 border border-slate-200 card-shadow">
+        <div class="mb-4">
+          <h3 class="text-sm font-bold text-slate-800">Evolução Mensal do Fluxo de Caixa (Regime de Caixa)</h3>
+          <p class="text-xs text-slate-500">Comparação das entradas, saídas e geração líquida mês a mês</p>
+        </div>
+        <div class="h-64"><canvas id="chartDFCMonthly"></canvas></div>
+      </div>
+
+      <!-- MATRIZ MENSAL DFC -->
+      <div class="bg-white rounded-xl p-5 border border-slate-200 card-shadow">
+        <div class="flex justify-between items-center mb-4">
+          <div>
+            <h3 class="text-base font-bold text-slate-800">Fluxo de Caixa Gerencial Mensal</h3>
+            <p class="text-xs text-slate-500">Resumo financeiro das movimentações efetivas</p>
+          </div>
+          <button onclick="window.print()" class="bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs px-3 py-1.5 rounded-md transition font-medium no-print flex items-center gap-1.5">
+            <i class="fa-solid fa-print"></i> Imprimir / PDF
+          </button>
+        </div>
+        <div class="overflow-x-auto">
+          <table class="w-full text-xs text-left border-collapse">
+            <thead id="headDFCMonthly" class="bg-slate-900 text-white uppercase text-[11px] tracking-wider"></thead>
+            <tbody id="bodyDFCMonthly" class="divide-y divide-slate-100 font-medium"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- DETALHAMENTO DFC -->
+      <div class="bg-white rounded-xl p-5 border border-slate-200 card-shadow">
+        <div class="mb-4">
+          <h3 class="text-base font-bold text-slate-800">Detalhamento Hierárquico do Fluxo de Caixa</h3>
+          <p class="text-xs text-slate-500">Expansão por Categoria → Subcategoria → SubPlano de Contas</p>
+        </div>
+        <div class="overflow-x-auto">
+          <table class="w-full text-xs text-left border-collapse">
+            <thead>
+              <tr class="bg-slate-800 text-white uppercase text-[11px] tracking-wider">
+                <th class="py-2.5 px-3">Estrutura de Caixa</th>
+                <th class="py-2.5 px-3 text-right">Realizado (R$)</th>
+                <th class="py-2.5 px-3 text-center">Representatividade (%)</th>
+              </tr>
+            </thead>
+            <tbody id="bodyDFCDetalhamento" class="divide-y divide-slate-100 font-medium"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- TELA 4 — ANÁLISE DE CATEGORIAS -->
+    <div id="page-categorias" class="hidden space-y-6">
+      <div class="bg-white rounded-xl p-5 border border-slate-200 card-shadow">
+        <div class="flex flex-wrap justify-between items-center mb-4 gap-3">
+          <div>
+            <h3 class="text-base font-bold text-slate-800">Análise de Categorias & Desvios Orçamentários</h3>
+            <p class="text-xs text-slate-500">Investigação hierárquica das variações (*Variance Analysis*)</p>
+          </div>
+          <div class="flex items-center gap-3">
+            <label class="text-xs font-semibold text-slate-600">Filtrar Classe:</label>
+            <select id="filterClassificacao" onchange="updateCategoriasTable()" class="bg-slate-100 text-slate-800 text-xs rounded-md px-3 py-1.5 border border-slate-300 focus:outline-none font-medium">
+              <option value="TODAS">Todas as Classes</option>
+              <option value="Receita">Receitas</option>
+              <option value="Custo">Custos (CMV/CSP)</option>
+              <option value="Despesa">Despesas</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="overflow-x-auto">
+          <table class="w-full text-xs text-left border-collapse">
+            <thead>
+              <tr class="bg-slate-800 text-white uppercase text-[11px] tracking-wider">
+                <th class="py-2.5 px-3">Estrutura Hierárquica</th>
+                <th class="py-2.5 px-3 text-right">Orçado (R$)</th>
+                <th class="py-2.5 px-3 text-right">Realizado (R$)</th>
+                <th class="py-2.5 px-3 text-right">Desvio (R$)</th>
+                <th class="py-2.5 px-3 text-center">Desvio (%) / Status</th>
+              </tr>
+            </thead>
+            <tbody id="tableCatBody" class="divide-y divide-slate-100 font-medium"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- TELA 5 — TENDÊNCIAS E SAZONALIDADE -->
+    <div id="page-tendencias" class="hidden space-y-6">
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <!-- Receita Mensal -->
+        <div class="bg-white rounded-xl p-5 border border-slate-200 card-shadow">
+          <div class="mb-4">
+            <h3 class="text-sm font-bold text-slate-800">Evolução Mensal da Receita Bruta</h3>
+            <p class="text-xs text-slate-500">Orçado vs. Realizado</p>
+          </div>
+          <div class="h-64"><canvas id="chartTrendRec"></canvas></div>
+        </div>
+
+        <!-- EBITDA Mensal -->
+        <div class="bg-white rounded-xl p-5 border border-slate-200 card-shadow">
+          <div class="mb-4">
+            <h3 class="text-sm font-bold text-slate-800">Evolução Mensal do EBITDA Operacional</h3>
+            <p class="text-xs text-slate-500">Orçado vs. Realizado</p>
+          </div>
+          <div class="h-64"><canvas id="chartTrendEbitda"></canvas></div>
+        </div>
+
+        <!-- Despesas Operacionais -->
+        <div class="bg-white rounded-xl p-5 border border-slate-200 card-shadow">
+          <div class="mb-4">
+            <h3 class="text-sm font-bold text-slate-800">Evolução de Despesas Operacionais</h3>
+            <p class="text-xs text-slate-500">Aderência Orçamentária</p>
+          </div>
+          <div class="h-64"><canvas id="chartTrendDesp"></canvas></div>
+        </div>
+
+        <!-- Fluxo de Caixa Mensal -->
+        <div class="bg-white rounded-xl p-5 border border-slate-200 card-shadow">
+          <div class="mb-4">
+            <h3 class="text-sm font-bold text-slate-800">Evolução Mensal de Geração de Caixa</h3>
+            <p class="text-xs text-slate-500">Entradas, Saídas e Geração Líquida</p>
+          </div>
+          <div class="h-64"><canvas id="chartTrendCaixa"></canvas></div>
+        </div>
+      </div>
+
+      <!-- MATRIZ MENSAL COMPLETA DRE -->
+      <div class="bg-white rounded-xl p-5 border border-slate-200 card-shadow">
+        <div class="mb-4">
+          <h3 class="text-sm font-bold text-slate-800">Matriz Mensal DRE & Caixa (Realizado R$)</h3>
+          <p class="text-xs text-slate-500">Visão sintética consolidada mês a mês no período filtrado</p>
+        </div>
+        <div class="overflow-x-auto">
+          <table class="w-full text-xs text-left border-collapse">
+            <thead id="headMonthlyMatrix" class="bg-slate-900 text-white uppercase text-[11px] tracking-wider"></thead>
+            <tbody id="bodyMonthlyMatrix" class="divide-y divide-slate-100 font-medium"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+  </main>
+
+  <footer class="bg-slate-900 text-slate-400 border-t border-slate-800 py-4 mt-auto text-center text-xs no-print">
+    © 2026 Painel Financeiro Gerencial — Conectado dinamicamente ao Google Sheets via Google Apps Script.
+  </footer>
+
+  <!-- SCRIPT DE INTELIGÊNCIA FINANCEIRA DA API -->
+  <script>
+    // PRESERVADA VERBATIM A CONSTANTE APPS_SCRIPT_URL DA VERSÃO ANTERIOR
+    const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxplhmOh5_LdqU_eqZyusE5jiG0LDsooaEkbfcjio6X2PQCu49dM45OW7qiCSZFKp2Y/exec";
+
+    let RAW_ORC = [];
+    let RAW_REAL = [];
+    let ALL_MONTHS_LIST = [];
+    let REAL_MONTHS_SET = new Set();
+    let DRE_MODE = 'sintetica';
+
+    let chartExecDREInst = null;
+    let chartExecRecTrendInst = null;
+    let chartExecEbitdaTrendInst = null;
+    let chartDFCMonthlyInst = null;
+    let chartTrendRecInst = null;
+    let chartTrendEbitdaInst = null;
+    let chartTrendDespInst = null;
+    let chartTrendCaixaInst = null;
+
+    // NORMALIZAÇÃO DE MONETÁRIOS E DATAS
+    function parseValue(val) {
+      if (val === null || val === undefined || val === "") return 0;
+      if (typeof val === 'number') return isNaN(val) ? 0 : val;
+      
+      let str = val.toString().trim();
+      if (!str) return 0;
+
+      str = str.replace(/R\$\s?/gi, '');
+      if (str.includes(',') && str.includes('.')) {
+        str = str.replace(/\./g, '').replace(',', '.');
+      } else if (str.includes(',')) {
+        str = str.replace(',', '.');
+      }
+
+      let num = parseFloat(str);
+      return isNaN(num) ? 0 : num;
+    }
+
+    function parseYearMonth(dateVal) {
+      if (!dateVal) return "";
+      let str = dateVal.toString().trim();
+
+      if (/^\d{4}-\d{2}/.test(str)) return str.substring(0, 7);
+      
+      if (/^\d{2}\/\d{2}\/\d{4}/.test(str)) {
+        let parts = str.split('/');
+        return `${parts[2]}-${parts[1]}`;
+      }
+
+      const monthMap = {
+        'jan': '01', 'fev': '02', 'mar': '03', 'abr': '04', 'mai': '05', 'jun': '06',
+        'jul': '07', 'ago': '08', 'set': '09', 'out': '10', 'nov': '11', 'dez': '12'
+      };
+
+      let lower = str.toLowerCase();
+      for (let m in monthMap) {
+        if (lower.startsWith(m)) {
+          let yearMatch = str.match(/\d{2,4}$/);
+          let yr = yearMatch ? yearMatch[0] : '2026';
+          if (yr.length === 2) yr = '20' + yr;
+          return `${yr}-${monthMap[m]}`;
+        }
+      }
+
+      return str.substring(0, 7);
+    }
+
+    function fmtR(val) {
+      if (val === null || val === undefined || isNaN(val)) return 'R$ 0,00';
+      return val.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+    }
+
+    function fmtPct(val) {
+      if (val === null || val === undefined || isNaN(val)) return 'N/A';
+      return (val > 0 ? '+' : '') + val.toFixed(1).replace('.', ',') + '%';
+    }
+
+    function resetFilters() {
+      document.getElementById('filterEmpresa').value = 'TODAS';
+      if (ALL_MONTHS_LIST.length > 0) {
+        document.getElementById('filterMesStart').value = ALL_MONTHS_LIST[0];
+        document.getElementById('filterMesEnd').value = ALL_MONTHS_LIST[Math.min(5, ALL_MONTHS_LIST.length - 1)];
+      }
+      updateDashboard();
+    }
+
+    function switchTab(tabId) {
+      document.querySelectorAll('.nav-tab').forEach(b => b.classList.remove('active', 'text-white'));
+      document.querySelectorAll('[id^="page-"]').forEach(p => p.classList.add('hidden'));
+
+      document.getElementById('tab-' + tabId).classList.add('active');
+      document.getElementById('page-' + tabId).classList.remove('hidden');
+    }
+
+    function toggleDREMode(mode) {
+      DRE_MODE = mode;
+      if (mode === 'sintetica') {
+        document.getElementById('btnDRESintetica').className = 'bg-slate-900 text-white text-xs px-3 py-1.5 rounded-md font-medium transition';
+        document.getElementById('btnDREDetalhada').className = 'bg-slate-100 text-slate-700 text-xs px-3 py-1.5 rounded-md font-medium hover:bg-slate-200 transition';
+      } else {
+        document.getElementById('btnDREDetalhada').className = 'bg-slate-900 text-white text-xs px-3 py-1.5 rounded-md font-medium transition';
+        document.getElementById('btnDRESintetica').className = 'bg-slate-100 text-slate-700 text-xs px-3 py-1.5 rounded-md font-medium hover:bg-slate-200 transition';
+      }
+      updateDashboard();
+    }
+
+    function toggleRowExp(rowId) {
+      const els = document.querySelectorAll(`[data-parent="${rowId}"]`);
+      els.forEach(el => {
+        el.classList.toggle('hidden');
+      });
+      const icon = document.getElementById(`icon-${rowId}`);
+      if (icon) {
+        if (icon.classList.contains('fa-plus')) {
+          icon.classList.remove('fa-plus');
+          icon.classList.add('fa-minus');
+        } else {
+          icon.classList.remove('fa-minus');
+          icon.classList.add('fa-plus');
+        }
+      }
+    }
+
+    function getFilteredData() {
+      const emp = document.getElementById('filterEmpresa').value;
+      const mStart = document.getElementById('filterMesStart').value;
+      const mEnd = document.getElementById('filterMesEnd').value;
+
+      const filterFn = item => {
+        if (emp !== 'TODAS' && item.Empresa !== emp) return false;
+        const ym = item.YearMonth;
+        if (ym < mStart || ym > mEnd) return false;
+        return true;
+      };
+
+      return {
+        orc: RAW_ORC.filter(filterFn),
+        real: RAW_REAL.filter(filterFn)
+      };
+    }
+
+    function getMonthsInRange() {
+      const mStart = document.getElementById('filterMesStart').value;
+      const mEnd = document.getElementById('filterMesEnd').value;
+      return ALL_MONTHS_LIST.filter(m => m >= mStart && m <= mEnd);
+    }
+
+    // CÁLCULOS DRE & DFC
+    function computeDREMetrics(filtered) {
+      const sumCat = (list, cat) => {
+        return list
+          .filter(d => d.Categoria === cat)
+          .reduce((acc, curr) => acc + curr.Valor, 0);
+      };
+
+      const mStart = document.getElementById('filterMesStart').value;
+      const mEnd = document.getElementById('filterMesEnd').value;
+      let hasRealizedInPeriod = false;
+
+      for (let m of REAL_MONTHS_SET) {
+        if (m >= mStart && m <= mEnd) {
+          hasRealizedInPeriod = true;
+          break;
+        }
+      }
+
+      const o_rb = sumCat(filtered.orc, 'Receita Bruta de Vendas e Serviços');
+      const r_rb = hasRealizedInPeriod ? sumCat(filtered.real, 'Receita Bruta de Vendas e Serviços') : null;
+
+      const o_ded = sumCat(filtered.orc, 'Deduções');
+      const r_ded = hasRealizedInPeriod ? sumCat(filtered.real, 'Deduções') : 0;
+
+      const o_rl = o_rb - o_ded;
+      const r_rl = hasRealizedInPeriod ? (r_rb - r_ded) : null;
+
+      const o_cmv = sumCat(filtered.orc, 'CMV/CSP');
+      const r_cmv = hasRealizedInPeriod ? sumCat(filtered.real, 'CMV/CSP') : 0;
+
+      const o_lb = o_rl - o_cmv;
+      const r_lb = hasRealizedInPeriod ? (r_rl - r_cmv) : null;
+
+      const o_dop = sumCat(filtered.orc, 'Despesas Operacionais');
+      const r_dop = hasRealizedInPeriod ? sumCat(filtered.real, 'Despesas Operacionais') : 0;
+
+      const o_dadm = sumCat(filtered.orc, 'Despesas Administrativas');
+      const r_dadm = hasRealizedInPeriod ? sumCat(filtered.real, 'Despesas Administrativas') : 0;
+
+      const o_imp = sumCat(filtered.orc, 'Impostos');
+      const r_imp = hasRealizedInPeriod ? sumCat(filtered.real, 'Impostos') : 0;
+
+      const o_ebitda = o_lb - o_dop - o_dadm - o_imp;
+      const r_ebitda = hasRealizedInPeriod ? (r_lb - r_dop - r_dadm - r_imp) : null;
+
+      const o_rfin = sumCat(filtered.orc, 'Receitas Financeiras');
+      const r_rfin = hasRealizedInPeriod ? sumCat(filtered.real, 'Receitas Financeiras') : 0;
+
+      const o_oute = sumCat(filtered.orc, 'Outras Receitas');
+      const r_oute = hasRealizedInPeriod ? sumCat(filtered.real, 'Outras Receitas') : 0;
+
+      const o_dfin = sumCat(filtered.orc, 'Despesas Financeiras');
+      const r_dfin = hasRealizedInPeriod ? sumCat(filtered.real, 'Despesas Financeiras') : 0;
+
+      const o_lair = o_ebitda + o_rfin + o_oute - o_dfin;
+      const r_lair = hasRealizedInPeriod ? (r_ebitda + r_rfin + r_oute - r_dfin) : null;
+
+      const o_ir = sumCat(filtered.orc, 'IRPJ/CSLL');
+      const r_ir = hasRealizedInPeriod ? sumCat(filtered.real, 'IRPJ/CSLL') : 0;
+
+      const o_ll = o_lair - o_ir;
+      const r_ll = hasRealizedInPeriod ? (r_lair - r_ir) : null;
+
+      const o_dl = sumCat(filtered.orc, 'DL');
+      const r_dl = hasRealizedInPeriod ? sumCat(filtered.real, 'DL') : 0;
+
+      const o_ladl = o_ll - o_dl;
+      const r_ladl = hasRealizedInPeriod ? (r_ll - r_dl) : null;
+
+      // Regime de Caixa
+      const entradas = hasRealizedInPeriod ? filtered.real.filter(d => d.Classificação === 'Receita').reduce((a, b) => a + b.Valor, 0) : null;
+      const saidas = hasRealizedInPeriod ? filtered.real.filter(d => d.Classificação === 'Custo' || d.Classificação === 'Despesa').reduce((a, b) => a + b.Valor, 0) : null;
+
+      return {
+        hasRealized: hasRealizedInPeriod,
+        rb: { o: o_rb, r: r_rb },
+        ded: { o: o_ded, r: r_ded },
+        rl: { o: o_rl, r: r_rl },
+        cmv: { o: o_cmv, r: r_cmv },
+        lb: { o: o_lb, r: r_lb },
+        dop: { o: o_dop, r: r_dop },
+        dadm: { o: o_dadm, r: r_dadm },
+        imp: { o: o_imp, r: r_imp },
+        ebitda: { o: o_ebitda, r: r_ebitda },
+        rfin: { o: o_rfin, r: r_rfin },
+        oute: { o: o_oute, r: r_oute },
+        dfin: { o: o_dfin, r: r_dfin },
+        lair: { o: o_lair, r: r_lair },
+        ir: { o: o_ir, r: r_ir },
+        ll: { o: o_ll, r: r_ll },
+        dl: { o: o_dl, r: r_dl },
+        ladl: { o: o_ladl, r: r_ladl },
+        dfc: { entradas, saidas, geracao: hasRealizedInPeriod ? (entradas - saidas) : null }
+      };
+    }
+
+    function updateDashboard() {
+      const filtered = getFilteredData();
+      const m = computeDREMetrics(filtered);
+
+      // 1. KPIS PRINCIPAIS
+      document.getElementById('kpi-rec-orc').innerText = fmtR(m.rb.o);
+      if (m.hasRealized && m.rb.r !== null) {
+        document.getElementById('kpi-rec-real').innerText = fmtR(m.rb.r);
+        const recDesvio = m.rb.o !== 0 ? ((m.rb.r - m.rb.o) / m.rb.o) * 100 : null;
+        const kpiRecD = document.getElementById('kpi-rec-desvio');
+        kpiRecD.innerText = fmtPct(recDesvio);
+        kpiRecD.className = (recDesvio !== null && recDesvio >= 0) ? 'font-bold px-2 py-0.5 rounded-full text-[11px] bg-emerald-100 text-emerald-800' : 'font-bold px-2 py-0.5 rounded-full text-[11px] bg-rose-100 text-rose-800';
+      } else {
+        document.getElementById('kpi-rec-real').innerText = "Sem Realizado";
+        document.getElementById('kpi-rec-desvio').innerText = "N/A";
+        document.getElementById('kpi-rec-desvio').className = 'font-bold px-2 py-0.5 rounded-full text-[11px] bg-slate-100 text-slate-600';
+      }
+
+      document.getElementById('kpi-ebitda-orc').innerText = fmtR(m.ebitda.o);
+      if (m.hasRealized && m.ebitda.r !== null) {
+        document.getElementById('kpi-ebitda-real').innerText = fmtR(m.ebitda.r);
+        const ebitdaDesvio = m.ebitda.o !== 0 ? ((m.ebitda.r - m.ebitda.o) / m.ebitda.o) * 100 : null;
+        const kpiEbitD = document.getElementById('kpi-ebitda-desvio');
+        kpiEbitD.innerText = fmtPct(ebitdaDesvio);
+        kpiEbitD.className = (ebitdaDesvio !== null && ebitdaDesvio >= 0) ? 'font-bold px-2 py-0.5 rounded-full text-[11px] bg-emerald-100 text-emerald-800' : 'font-bold px-2 py-0.5 rounded-full text-[11px] bg-amber-100 text-amber-800';
+      } else {
+        document.getElementById('kpi-ebitda-real').innerText = "Sem Realizado";
+        document.getElementById('kpi-ebitda-desvio').innerText = "N/A";
+        document.getElementById('kpi-ebitda-desvio').className = 'font-bold px-2 py-0.5 rounded-full text-[11px] bg-slate-100 text-slate-600';
+      }
+
+      document.getElementById('kpi-ll-orc').innerText = fmtR(m.ll.o);
+      if (m.hasRealized && m.ll.r !== null) {
+        document.getElementById('kpi-ll-real').innerText = fmtR(m.ll.r);
+        const llDesvio = m.ll.o !== 0 ? ((m.ll.r - m.ll.o) / m.ll.o) * 100 : null;
+        const kpiLLD = document.getElementById('kpi-ll-desvio');
+        kpiLLD.innerText = fmtPct(llDesvio);
+        kpiLLD.className = (llDesvio !== null && llDesvio >= 0) ? 'font-bold px-2 py-0.5 rounded-full text-[11px] bg-emerald-100 text-emerald-800' : 'font-bold px-2 py-0.5 rounded-full text-[11px] bg-rose-100 text-rose-800';
+      } else {
+        document.getElementById('kpi-ll-real').innerText = "Sem Realizado";
+        document.getElementById('kpi-ll-desvio').innerText = "N/A";
+        document.getElementById('kpi-ll-desvio').className = 'font-bold px-2 py-0.5 rounded-full text-[11px] bg-slate-100 text-slate-600';
+      }
+
+      if (m.hasRealized && m.dfc.geracao !== null) {
+        document.getElementById('kpi-caixa-geracao').innerText = fmtR(m.dfc.geracao);
+        document.getElementById('dfc-entradas').innerText = fmtR(m.dfc.entradas);
+        document.getElementById('dfc-saidas').innerText = fmtR(m.dfc.saidas);
+        document.getElementById('dfc-geracao').innerText = fmtR(m.dfc.geracao);
+        document.getElementById('kpi-caixa-status').innerText = m.dfc.geracao >= 0 ? "Entradas > Saídas" : "Saídas > Entradas";
+        document.getElementById('kpi-caixa-status').className = m.dfc.geracao >= 0 ? "font-bold text-emerald-600" : "font-bold text-rose-600";
+      } else {
+        document.getElementById('kpi-caixa-geracao').innerText = "Sem Realizado";
+        document.getElementById('dfc-entradas').innerText = "N/A";
+        document.getElementById('dfc-saidas').innerText = "N/A";
+        document.getElementById('dfc-geracao').innerText = "N/A";
+        document.getElementById('kpi-caixa-status').innerText = "Sem Lançamentos";
+        document.getElementById('kpi-caixa-status').className = "font-semibold text-slate-500";
+      }
+
+      // 2. KPIS SECUNDÁRIOS
+      if (m.hasRealized && m.rl.r && m.rl.r !== 0) {
+        document.getElementById('sec-m-bruta').innerText = ((m.lb.r / m.rl.r) * 100).toFixed(1) + '%';
+        document.getElementById('sec-m-ebitda').innerText = ((m.ebitda.r / m.rl.r) * 100).toFixed(1) + '%';
+        document.getElementById('sec-m-liquida').innerText = ((m.ll.r / m.rl.r) * 100).toFixed(1) + '%';
+      } else {
+        document.getElementById('sec-m-bruta').innerText = "N/A";
+        document.getElementById('sec-m-ebitda').innerText = "N/A";
+        document.getElementById('sec-m-liquida').innerText = "N/A";
+      }
+
+      document.getElementById('sec-desp-fin').innerText = m.hasRealized ? fmtR(m.dfin.r) : "N/A";
+      document.getElementById('sec-dl').innerText = m.hasRealized ? fmtR(m.dl.r) : "N/A";
+      document.getElementById('sec-ladl').innerText = m.hasRealized ? fmtR(m.ladl.r) : "N/A";
+
+      // 3. ALERTAS GERENCIAIS AUTOMÁTICOS
+      renderAlerts(m);
+
+      // 4. RENDERIZAÇÃO DE TABELAS E GRÁFICOS
+      updateDRETable(m, filtered);
+      updateDFCTables(filtered);
+      updateCategoriasTable();
+      updateMonthlyMatrix();
+      updateExecCharts(m);
+      updateTrendCharts();
+    }
+
+    function renderAlerts(m) {
+      const container = document.getElementById('alertsContainer');
+      let alerts = [];
+
+      if (!m.hasRealized) {
+        alerts.push({
+          type: 'info',
+          title: 'Período sem realizado',
+          text: 'O período selecionado contém apenas dados orçamentários previstos.'
+        });
+      } else {
+        if (m.rb.r > m.rb.o) {
+          alerts.push({
+            type: 'success',
+            title: 'Receita acima da meta',
+            text: `Receita realizada superou o orçado em ${fmtR(m.rb.r - m.rb.o)} (${fmtPct((m.rb.r - m.rb.o)/m.rb.o*100)}).`
+          });
+        } else {
+          alerts.push({
+            type: 'warning',
+            title: 'Receita abaixo do orçamento',
+            text: `Receita realizada ficou ${fmtR(m.rb.o - m.rb.r)} abaixo do planejado.`
+          });
+        }
+
+        if (m.ebitda.r < m.ebitda.o) {
+          alerts.push({
+            type: 'danger',
+            title: 'EBITDA abaixo da meta',
+            text: `Resultado operacional ficou abaixo do orçado em ${fmtR(m.ebitda.o - m.ebitda.r)}.`
+          });
+        } else {
+          alerts.push({
+            type: 'success',
+            title: 'EBITDA dentro da meta',
+            text: `Resultado operacional realizado atendeu ao planejamento financeiro.`
+          });
+        }
+
+        if (m.dfc.geracao !== null && m.dfc.geracao < 0) {
+          alerts.push({
+            type: 'danger',
+            title: 'Geração de caixa negativa',
+            text: `Saídas superaram as entradas em ${fmtR(Math.abs(m.dfc.geracao))}. Atenção à liquidez.`
+          });
+        } else if (m.dfc.geracao !== null) {
+          alerts.push({
+            type: 'success',
+            title: 'Geração de caixa positiva',
+            text: `Entradas de caixa superaram saídas em ${fmtR(m.dfc.geracao)}.`
+          });
+        }
+      }
+
+      let html = '';
+      alerts.forEach(a => {
+        let borderClass = 'border-slate-700 bg-slate-800/80';
+        if (a.type === 'success') borderClass = 'border-emerald-500/30 bg-emerald-950/40 text-emerald-300';
+        if (a.type === 'warning') borderClass = 'border-amber-500/30 bg-amber-950/40 text-amber-300';
+        if (a.type === 'danger') borderClass = 'border-rose-500/30 bg-rose-950/40 text-rose-300';
+
+        html += `<div class="p-3 rounded-lg border ${borderClass}">
+          <strong class="block font-bold mb-0.5">${a.title}</strong>
+          <span class="text-[11px] opacity-90">${a.text}</span>
+        </div>`;
+      });
+
+      container.innerHTML = html;
+    }
+
+    // TELA 2 — DRE GERENCIAL
+    function updateDRETable(m, filtered) {
+      const rows = [
+        { id: 'rb', label: 'RECEITA BRUTA DE VENDAS E SERVIÇOS', cat: 'Receita Bruta de Vendas e Serviços', o: m.rb.o, r: m.rb.r, bold: true, isRec: true },
+        { id: 'ded', label: '(-) DEDUÇÕES DA RECEITA', cat: 'Deduções', o: m.ded.o, r: m.ded.r, bold: false, isRec: false },
+        { id: 'rl', label: '(=) RECEITA LÍQUIDA', o: m.rl.o, r: m.rl.r, bold: true, bg: 'bg-slate-100', isRec: true },
+        { id: 'cmv', label: '(-) CUSTOS DAS MERCADORIAS E SERVIÇOS (CMV/CSP)', cat: 'CMV/CSP', o: m.cmv.o, r: m.cmv.r, bold: false, isRec: false },
+        { id: 'lb', label: '(=) LUCRO BRUTO', o: m.lb.o, r: m.lb.r, bold: true, bg: 'bg-slate-200/60', isRec: true },
+        { id: 'dop', label: '(-) DESPESAS OPERACIONAIS', cat: 'Despesas Operacionais', o: m.dop.o, r: m.dop.r, bold: false, isRec: false },
+        { id: 'dadm', label: '(-) DESPESAS ADMINISTRATIVAS', cat: 'Despesas Administrativas', o: m.dadm.o, r: m.dadm.r, bold: false, isRec: false },
+        { id: 'imp', label: '(-) IMPOSTOS OPERACIONAIS', cat: 'Impostos', o: m.imp.o, r: m.imp.r, bold: false, isRec: false },
+        { id: 'ebitda', label: '(=) EBITDA OPERACIONAL', o: m.ebitda.o, r: m.ebitda.r, bold: true, bg: 'bg-blue-100/70', isRec: true },
+        { id: 'rfin', label: '(+) RECEITAS FINANCEIRAS', cat: 'Receitas Financeiras', o: m.rfin.o, r: m.rfin.r, bold: false, isRec: true },
+        { id: 'oute', label: '(+) OUTRAS RECEITAS', cat: 'Outras Receitas', o: m.oute.o, r: m.oute.r, bold: false, isRec: true },
+        { id: 'dfin', label: '(-) DESPESAS FINANCEIRAS', cat: 'Despesas Financeiras', o: m.dfin.o, r: m.dfin.r, bold: false, isRec: false },
+        { id: 'lair', label: '(=) RESULTADO ANTES DOS TRIBUTOS (LAIR)', o: m.lair.o, r: m.lair.r, bold: true, isRec: true },
+        { id: 'ir', label: '(-) IRPJ / CSLL', cat: 'IRPJ/CSLL', o: m.ir.o, r: m.ir.r, bold: false, isRec: false },
+        { id: 'll', label: '(=) LUCRO LÍQUIDO', o: m.ll.o, r: m.ll.r, bold: true, bg: 'bg-emerald-100/70', isRec: true },
+        { id: 'dl', label: '(-) DISTRIBUIÇÃO DE LUCROS (DL)', cat: 'DL', o: m.dl.o, r: m.dl.r, bold: false, isRec: false },
+        { id: 'ladl', label: '(=) LUCRO APÓS DISTRIBUIÇÃO DE LUCROS', o: m.ladl.o, r: m.ladl.r, bold: true, bg: 'bg-indigo-100/70', isRec: true }
+      ];
+
+      let html = '';
+      rows.forEach(r => {
+        const hasR = m.hasRealized && r.r !== null;
+        const desvioR = hasR ? (r.r - r.o) : null;
+        const desvioP = (hasR && r.o !== 0) ? (desvioR / r.o) * 100 : null;
+
+        const isFav = r.isRec ? (desvioR >= 0) : (desvioR <= 0);
+        const badgeClass = !hasR ? 'bg-slate-100 text-slate-500' : (isFav ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800');
+
+        const canExpand = DRE_MODE === 'detalhada' && r.cat;
+
+        html += `<tr class="${r.bg || ''} ${r.bold ? 'font-bold text-slate-900' : 'text-slate-700'} hover:bg-slate-100/80 transition">
+          <td class="py-2.5 px-4 flex items-center gap-2">
+            ${canExpand ? `<button onclick="toggleRowExp('dre-${r.id}')" class="w-4 h-4 rounded bg-slate-200 hover:bg-slate-300 text-slate-700 flex items-center justify-center text-[10px]"><i id="icon-dre-${r.id}" class="fa-solid fa-plus"></i></button>` : ''}
+            <span>${r.label}</span>
+          </td>
+          <td class="py-2.5 px-4 text-right">${fmtR(r.o)}</td>
+          <td class="py-2.5 px-4 text-right">${hasR ? fmtR(r.r) : 'Sem Realizado'}</td>
+          <td class="py-2.5 px-4 text-right">${hasR ? fmtR(desvioR) : 'N/A'}</td>
+          <td class="py-2.5 px-4 text-center">
+            <span class="px-2 py-0.5 rounded-full text-[10px] font-bold ${badgeClass}">
+              ${hasR ? fmtPct(desvioP) : 'N/A'}
+            </span>
+          </td>
+        </tr>`;
+
+        if (canExpand) {
+          const subMap = {};
+          filtered.orc.filter(d => d.Categoria === r.cat).forEach(d => {
+            const sub = d['SubPlano de Contas'] || d.SubCategoria || 'Geral';
+            if (!subMap[sub]) subMap[sub] = { o: 0, r: 0, hasR: false };
+            subMap[sub].o += d.Valor;
+          });
+          filtered.real.filter(d => d.Categoria === r.cat).forEach(d => {
+            const sub = d['SubPlano de Contas'] || d.SubCategoria || 'Geral';
+            if (!subMap[sub]) subMap[sub] = { o: 0, r: 0, hasR: true };
+            subMap[sub].r += d.Valor;
+            subMap[sub].hasR = true;
+          });
+
+          Object.keys(subMap).forEach(subName => {
+            const item = subMap[subName];
+            const subDesvioR = item.hasR ? (item.r - item.o) : null;
+            const subDesvioP = (item.hasR && item.o !== 0) ? (subDesvioR / item.o) * 100 : null;
+
+            html += `<tr data-parent="dre-${r.id}" class="hidden bg-slate-50/70 text-slate-600 text-[11px] italic">
+              <td class="py-1.5 pl-10 pr-4">└ ${subName}</td>
+              <td class="py-1.5 px-4 text-right">${fmtR(item.o)}</td>
+              <td class="py-1.5 px-4 text-right">${item.hasR ? fmtR(item.r) : 'Sem Realizado'}</td>
+              <td class="py-1.5 px-4 text-right">${item.hasR ? fmtR(subDesvioR) : 'N/A'}</td>
+              <td class="py-1.5 px-4 text-center">${item.hasR ? fmtPct(subDesvioP) : 'N/A'}</td>
+            </tr>`;
+          });
+        }
+      });
+
+      document.getElementById('tableDREBody').innerHTML = html;
+    }
+
+    // TELA 3 — FLUXO DE CAIXA GERENCIAL
+    function updateDFCTables(filtered) {
+      const months = getMonthsInRange();
+
+      let headHtml = `<tr><th class="py-2.5 px-3">Linha de Caixa</th>`;
+      months.forEach(m => {
+        headHtml += `<th class="py-2.5 px-3 text-right">${m.substring(5)}/${m.substring(2,4)}</th>`;
+      });
+      headHtml += `<th class="py-2.5 px-3 text-right font-bold bg-slate-800">Total Período</th></tr>`;
+      document.getElementById('headDFCMonthly').innerHTML = headHtml;
+
+      let bodyHtml = '';
+
+      const lines = [
+        { label: '(+) ENTRADAS DE CAIXA', isEntrada: true, bg: 'bg-emerald-50/50', bold: true },
+        { label: '(-) SAÍDAS DE CAIXA', isSaida: true, bg: 'bg-rose-50/50', bold: true },
+        { label: '(=) GERAÇÃO LÍQUIDA DE CAIXA', isGeracao: true, bg: 'bg-slate-100', bold: true }
+      ];
+
+      lines.forEach(line => {
+        let rowHtml = `<td class="py-2 px-3 ${line.bold ? 'font-bold text-slate-900' : ''}">${line.label}</td>`;
+        let total = 0;
+        let hasAny = false;
+
+        months.forEach(ym => {
+          if (!REAL_MONTHS_SET.has(ym)) {
+            rowHtml += `<td class="py-2 px-3 text-right text-slate-400 font-normal">Sem Real.</td>`;
+          } else {
+            hasAny = true;
+            let val = 0;
+            if (line.isEntrada) {
+              val = filtered.real.filter(d => d.Classificação === 'Receita' && d.YearMonth === ym).reduce((a,b) => a+b.Valor, 0);
+            } else if (line.isSaida) {
+              val = filtered.real.filter(d => (d.Classificação === 'Custo' || d.Classificação === 'Despesa') && d.YearMonth === ym).reduce((a,b) => a+b.Valor, 0);
+            } else if (line.isGeracao) {
+              const ent = filtered.real.filter(d => d.Classificação === 'Receita' && d.YearMonth === ym).reduce((a,b) => a+b.Valor, 0);
+              const sai = filtered.real.filter(d => (d.Classificação === 'Custo' || d.Classificação === 'Despesa') && d.YearMonth === ym).reduce((a,b) => a+b.Valor, 0);
+              val = ent - sai;
+            }
+            total += val;
+            rowHtml += `<td class="py-2 px-3 text-right font-semibold">${fmtR(val)}</td>`;
+          }
+        });
+
+        rowHtml += `<td class="py-2 px-3 text-right font-extrabold bg-slate-200/70">${hasAny ? fmtR(total) : 'N/A'}</td>`;
+        bodyHtml += `<tr class="${line.bg || ''}">${rowHtml}</tr>`;
+      });
+
+      document.getElementById('bodyDFCMonthly').innerHTML = bodyHtml;
+
+      let detHtml = '';
+      const totalEntradas = filtered.real.filter(d => d.Classificação === 'Receita').reduce((a,b)=>a+b.Valor,0);
+      const totalSaidas = filtered.real.filter(d => d.Classificação === 'Custo' || d.Classificação === 'Despesa').reduce((a,b)=>a+b.Valor,0);
+
+      detHtml += `<tr class="bg-emerald-100/70 font-bold text-slate-900"><td class="py-2 px-3">(+) ENTRADAS DE CAIXA</td><td class="py-2 px-3 text-right">${fmtR(totalEntradas)}</td><td class="py-2 px-3 text-center">100,0%</td></tr>`;
+      const catEntradas = {};
+      filtered.real.filter(d => d.Classificação === 'Receita').forEach(d => {
+        catEntradas[d.Categoria] = (catEntradas[d.Categoria] || 0) + d.Valor;
+      });
+      Object.keys(catEntradas).forEach(c => {
+        const val = catEntradas[c];
+        const pct = totalEntradas > 0 ? (val / totalEntradas * 100).toFixed(1) + '%' : '0,0%';
+        detHtml += `<tr class="hover:bg-slate-50"><td class="py-1.5 pl-6 pr-3 font-semibold text-slate-700">└ ${c}</td><td class="py-1.5 px-3 text-right">${fmtR(val)}</td><td class="py-1.5 px-3 text-center">${pct}</td></tr>`;
+      });
+
+      detHtml += `<tr class="bg-rose-100/70 font-bold text-slate-900"><td class="py-2 px-3">(-) SAÍDAS DE CAIXA</td><td class="py-2 px-3 text-right">${fmtR(totalSaidas)}</td><td class="py-2 px-3 text-center">100,0%</td></tr>`;
+      const catSaidas = {};
+      filtered.real.filter(d => d.Classificação === 'Custo' || d.Classificação === 'Despesa').forEach(d => {
+        catSaidas[d.Categoria] = (catSaidas[d.Categoria] || 0) + d.Valor;
+      });
+      Object.keys(catSaidas).forEach(c => {
+        const val = catSaidas[c];
+        const pct = totalSaidas > 0 ? (val / totalSaidas * 100).toFixed(1) + '%' : '0,0%';
+        detHtml += `<tr class="hover:bg-slate-50"><td class="py-1.5 pl-6 pr-3 font-semibold text-slate-700">└ ${c}</td><td class="py-1.5 px-3 text-right">${fmtR(val)}</td><td class="py-1.5 px-3 text-center">${pct}</td></tr>`;
+      });
+
+      document.getElementById('bodyDFCDetalhamento').innerHTML = detHtml;
+    }
+
+    // TELA 4 — ANÁLISE DE CATEGORIAS
+    function updateCategoriasTable() {
+      const filtered = getFilteredData();
+      const filterClass = document.getElementById('filterClassificacao').value;
+
+      const map = {};
+
+      filtered.orc.forEach(d => {
+        if (filterClass !== 'TODAS' && d.Classificação !== filterClass) return;
+        const subCat = d.SubCategoria || 'Geral';
+        const subPlano = d['SubPlano de Contas'] || 'Geral';
+        const keyClass = d.Classificação;
+        const keyCat = `${keyClass}||${d.Categoria}`;
+        const keySubCat = `${keyCat}||${subCat}`;
+        const keySubPlano = `${keySubCat}||${subPlano}`;
+
+        if (!map[keyClass]) map[keyClass] = { label: d.Classificação, level: 1, o: 0, r: 0, hasR: false, children: {} };
+        map[keyClass].o += d.Valor;
+
+        if (!map[keyClass].children[keyCat]) map[keyClass].children[keyCat] = { label: d.Categoria, level: 2, o: 0, r: 0, hasR: false, children: {} };
+        map[keyClass].children[keyCat].o += d.Valor;
+
+        if (!map[keyClass].children[keyCat].children[keySubCat]) map[keyClass].children[keyCat].children[keySubCat] = { label: subCat, level: 3, o: 0, r: 0, hasR: false, children: {} };
+        map[keyClass].children[keyCat].children[keySubCat].o += d.Valor;
+
+        if (!map[keyClass].children[keyCat].children[keySubCat].children[keySubPlano]) map[keyClass].children[keyCat].children[keySubCat].children[keySubPlano] = { label: subPlano, level: 4, o: 0, r: 0, hasR: false };
+        map[keyClass].children[keyCat].children[keySubCat].children[keySubPlano].o += d.Valor;
+      });
+
+      filtered.real.forEach(d => {
+        if (filterClass !== 'TODAS' && d.Classificação !== filterClass) return;
+        const subCat = d.SubCategoria || 'Geral';
+        const subPlano = d['SubPlano de Contas'] || 'Geral';
+        const keyClass = d.Classificação;
+        const keyCat = `${keyClass}||${d.Categoria}`;
+        const keySubCat = `${keyCat}||${subCat}`;
+        const keySubPlano = `${keySubCat}||${subPlano}`;
+
+        if (!map[keyClass]) map[keyClass] = { label: d.Classificação, level: 1, o: 0, r: 0, hasR: true, children: {} };
+        map[keyClass].r += d.Valor;
+        map[keyClass].hasR = true;
+
+        if (!map[keyClass].children[keyCat]) map[keyClass].children[keyCat] = { label: d.Categoria, level: 2, o: 0, r: 0, hasR: true, children: {} };
+        map[keyClass].children[keyCat].r += d.Valor;
+        map[keyClass].children[keyCat].hasR = true;
+
+        if (!map[keyClass].children[keyCat].children[keySubCat]) map[keyClass].children[keyCat].children[keySubCat] = { label: subCat, level: 3, o: 0, r: 0, hasR: true, children: {} };
+        map[keyClass].children[keyCat].children[keySubCat].r += d.Valor;
+        map[keyClass].children[keyCat].children[keySubCat].hasR = true;
+
+        if (!map[keyClass].children[keyCat].children[keySubCat].children[keySubPlano]) map[keyClass].children[keyCat].children[keySubCat].children[keySubPlano] = { label: subPlano, level: 4, o: 0, r: 0, hasR: true };
+        map[keyClass].children[keyCat].children[keySubCat].children[keySubPlano].r += d.Valor;
+        map[keyClass].children[keyCat].children[keySubCat].children[keySubPlano].hasR = true;
+      });
+
+      let html = '';
+      let idCounter = 0;
+
+      Object.keys(map).forEach(classKey => {
+        const cObj = map[classKey];
+        const cId = `cat-${++idCounter}`;
+        const desvioR = cObj.hasR ? (cObj.r - cObj.o) : null;
+        const desvioP = (cObj.hasR && cObj.o !== 0) ? (desvioR / cObj.o) * 100 : null;
+        const isRec = cObj.label === 'Receita';
+        const isFav = isRec ? (desvioR >= 0) : (desvioR <= 0);
+        const badgeClass = !cObj.hasR ? 'bg-slate-100 text-slate-500' : (isFav ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800');
+
+        html += `<tr class="bg-slate-800 text-white font-bold">
+          <td class="py-2.5 px-3 flex items-center gap-2">
+            <button onclick="toggleRowExp('${cId}')" class="w-4 h-4 rounded bg-slate-700 hover:bg-slate-600 text-white flex items-center justify-center text-[10px]"><i id="icon-${cId}" class="fa-solid fa-plus"></i></button>
+            <span>[Nível 1] Classe: ${cObj.label}</span>
+          </td>
+          <td class="py-2.5 px-3 text-right">${fmtR(cObj.o)}</td>
+          <td class="py-2.5 px-3 text-right">${cObj.hasR ? fmtR(cObj.r) : 'Sem Realizado'}</td>
+          <td class="py-2.5 px-3 text-right">${cObj.hasR ? fmtR(desvioR) : 'N/A'}</td>
+          <td class="py-2.5 px-3 text-center"><span class="px-2 py-0.5 rounded-full text-[10px] font-bold ${badgeClass}">${cObj.hasR ? fmtPct(desvioP) : 'N/A'}</span></td>
+        </tr>`;
+
+        Object.keys(cObj.children).forEach(catKey => {
+          const catObj = cObj.children[catKey];
+          const catId = `cat-${++idCounter}`;
+          const catDesvioR = catObj.hasR ? (catObj.r - catObj.o) : null;
+          const catDesvioP = (catObj.hasR && catObj.o !== 0) ? (catDesvioR / catObj.o) * 100 : null;
+          const catFav = isRec ? (catDesvioR >= 0) : (catDesvioR <= 0);
+          const catBadge = !catObj.hasR ? 'bg-slate-100 text-slate-500' : (catFav ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800');
+
+          html += `<tr data-parent="${cId}" class="hidden bg-slate-100 font-semibold text-slate-800">
+            <td class="py-2 pl-6 pr-3 flex items-center gap-2">
+              <button onclick="toggleRowExp('${catId}')" class="w-4 h-4 rounded bg-slate-300 hover:bg-slate-400 text-slate-800 flex items-center justify-center text-[10px]"><i id="icon-${catId}" class="fa-solid fa-plus"></i></button>
+              <span>[Nível 2] Categoria: ${catObj.label}</span>
+            </td>
+            <td class="py-2 px-3 text-right">${fmtR(catObj.o)}</td>
+            <td class="py-2 px-3 text-right">${catObj.hasR ? fmtR(catObj.r) : 'Sem Realizado'}</td>
+            <td class="py-2 px-3 text-right">${catObj.hasR ? fmtR(catDesvioR) : 'N/A'}</td>
+            <td class="py-2 px-3 text-center"><span class="px-2 py-0.5 rounded-full text-[10px] font-bold ${catBadge}">${catObj.hasR ? fmtPct(catDesvioP) : 'N/A'}</span></td>
+          </tr>`;
+
+          Object.keys(catObj.children).forEach(subCatKey => {
+            const subCatObj = catObj.children[subCatKey];
+            const subCatId = `cat-${++idCounter}`;
+            const subDesvioR = subCatObj.hasR ? (subCatObj.r - subCatObj.o) : null;
+            const subDesvioP = (subCatObj.hasR && subCatObj.o !== 0) ? (subDesvioR / subCatObj.o) * 100 : null;
+            const subFav = isRec ? (subDesvioR >= 0) : (subDesvioR <= 0);
+            const subBadge = !subCatObj.hasR ? 'bg-slate-100 text-slate-500' : (subFav ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800');
+
+            html += `<tr data-parent="${catId}" class="hidden bg-slate-50 text-slate-700 font-medium">
+              <td class="py-1.5 pl-10 pr-3 flex items-center gap-2">
+                <button onclick="toggleRowExp('${subCatId}')" class="w-4 h-4 rounded bg-slate-200 hover:bg-slate-300 text-slate-700 flex items-center justify-center text-[10px]"><i id="icon-${subCatId}" class="fa-solid fa-plus"></i></button>
+                <span>[Nível 3] SubCategoria: ${subCatObj.label}</span>
+              </td>
+              <td class="py-1.5 px-3 text-right">${fmtR(subCatObj.o)}</td>
+              <td class="py-1.5 px-3 text-right">${subCatObj.hasR ? fmtR(subCatObj.r) : 'Sem Realizado'}</td>
+              <td class="py-1.5 px-3 text-right">${subCatObj.hasR ? fmtR(subDesvioR) : 'N/A'}</td>
+              <td class="py-1.5 px-3 text-center"><span class="px-2 py-0.5 rounded-full text-[10px] font-bold ${subBadge}">${subCatObj.hasR ? fmtPct(subDesvioP) : 'N/A'}</span></td>
+            </tr>`;
+
+            Object.keys(subCatObj.children).forEach(subPlanoKey => {
+              const spObj = subCatObj.children[subPlanoKey];
+              const spDesvioR = spObj.hasR ? (spObj.r - spObj.o) : null;
+              const spDesvioP = (spObj.hasR && spObj.o !== 0) ? (spDesvioR / spObj.o) * 100 : null;
+              const spFav = isRec ? (spDesvioR >= 0) : (spDesvioR <= 0);
+              const spBadge = !spObj.hasR ? 'bg-slate-100 text-slate-500' : (spFav ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800');
+
+              html += `<tr data-parent="${subCatId}" class="hidden bg-white text-slate-600 text-[11px] italic">
+                <td class="py-1 pl-14 pr-3">└ [Nível 4] SubPlano: ${spObj.label}</td>
+                <td class="py-1 px-3 text-right">${fmtR(spObj.o)}</td>
+                <td class="py-1 px-3 text-right">${spObj.hasR ? fmtR(spObj.r) : 'Sem Realizado'}</td>
+                <td class="py-1 px-3 text-right">${spObj.hasR ? fmtR(spDesvioR) : 'N/A'}</td>
+                <td class="py-1 px-3 text-center"><span class="px-2 py-0.5 rounded-full text-[10px] font-bold ${spBadge}">${spObj.hasR ? fmtPct(spDesvioP) : 'N/A'}</span></td>
+              </tr>`;
+            });
+          });
+        });
+      });
+
+      document.getElementById('tableCatBody').innerHTML = html || '<tr><td colspan="5" class="text-center py-4 text-slate-400">Nenhum registro encontrado</td></tr>';
+    }
+
+    // TELA 5 — MATRIZ MENSAL COMPLETA DRE
+    function updateMonthlyMatrix() {
+      const filtered = getFilteredData();
+      const months = getMonthsInRange();
+
+      let headHtml = `<tr><th class="py-2.5 px-3">Indicador / Conta</th>`;
+      months.forEach(m => {
+        headHtml += `<th class="py-2.5 px-3 text-right">${m.substring(5)}/${m.substring(2,4)}</th>`;
+      });
+      headHtml += `<th class="py-2.5 px-3 text-right font-bold bg-slate-800">Total Período</th></tr>`;
+      document.getElementById('headMonthlyMatrix').innerHTML = headHtml;
+
+      const metricsList = [
+        { label: 'Receita Bruta', cat: 'Receita Bruta de Vendas e Serviços' },
+        { label: 'Deduções', cat: 'Deduções' },
+        { label: 'CMV/CSP', cat: 'CMV/CSP' },
+        { label: 'Despesas Operacionais', cat: 'Despesas Operacionais' },
+        { label: 'Despesas Administrativas', cat: 'Despesas Administrativas' },
+        { label: 'Despesas Financeiras', cat: 'Despesas Financeiras' },
+        { label: 'Receitas Financeiras', cat: 'Receitas Financeiras' },
+        { label: 'Entradas de Caixa', isDFC: true, isEntrada: true },
+        { label: 'Saídas de Caixa', isDFC: true, isSaida: true },
+        { label: 'Geração Líquida de Caixa', isDFC: true, isGeracao: true }
+      ];
+
+      let bodyHtml = '';
+      metricsList.forEach(m => {
+        let rowHtml = `<td class="py-2 px-3 font-semibold text-slate-800">${m.label}</td>`;
+        let total = 0;
+        let hasAny = false;
+
+        months.forEach(ym => {
+          if (!REAL_MONTHS_SET.has(ym)) {
+            rowHtml += `<td class="py-2 px-3 text-right text-slate-400 font-normal">Sem Real.</td>`;
+          } else {
+            hasAny = true;
+            let val = 0;
+            if (m.isDFC) {
+              if (m.isEntrada) val = filtered.real.filter(d => d.Classificação === 'Receita' && d.YearMonth === ym).reduce((a,b)=>a+b.Valor,0);
+              if (m.isSaida) val = filtered.real.filter(d => (d.Classificação === 'Custo' || d.Classificação === 'Despesa') && d.YearMonth === ym).reduce((a,b)=>a+b.Valor,0);
+              if (m.isGeracao) {
+                const ent = filtered.real.filter(d => d.Classificação === 'Receita' && d.YearMonth === ym).reduce((a,b)=>a+b.Valor,0);
+                const sai = filtered.real.filter(d => (d.Classificação === 'Custo' || d.Classificação === 'Despesa') && d.YearMonth === ym).reduce((a,b)=>a+b.Valor,0);
+                val = ent - sai;
+              }
+            } else {
+              val = filtered.real.filter(d => d.Categoria === m.cat && d.YearMonth === ym).reduce((a,b)=>a+b.Valor,0);
+            }
+            total += val;
+            rowHtml += `<td class="py-2 px-3 text-right font-medium">${fmtR(val)}</td>`;
+          }
+        });
+
+        rowHtml += `<td class="py-2 px-3 text-right font-extrabold bg-slate-100">${hasAny ? fmtR(total) : 'N/A'}</td>`;
+        bodyHtml += `<tr class="hover:bg-slate-50">${rowHtml}</tr>`;
+      });
+
+      document.getElementById('bodyMonthlyMatrix').innerHTML = bodyHtml;
+    }
+
+    // GRÁFICOS
+    function updateExecCharts(m) {
+      const ctx1 = document.getElementById('chartExecDRE').getContext('2d');
+      if (chartExecDREInst) chartExecDREInst.destroy();
+
+      const r_rb = m.rb.r !== null ? m.rb.r : 0;
+      const r_rl = m.rl.r !== null ? m.rl.r : 0;
+      const r_lb = m.lb.r !== null ? m.lb.r : 0;
+      const r_ebitda = m.ebitda.r !== null ? m.ebitda.r : 0;
+      const r_lair = m.lair.r !== null ? m.lair.r : 0;
+      const r_ll = m.ll.r !== null ? m.ll.r : 0;
+
+      chartExecDREInst = new Chart(ctx1, {
+        type: 'bar',
+        data: {
+          labels: ['Receita Bruta', 'Receita Líq.', 'Lucro Bruto', 'EBITDA', 'LAIR', 'Lucro Líq.'],
+          datasets: [
+            { label: 'Orçado', data: [m.rb.o, m.rl.o, m.lb.o, m.ebitda.o, m.lair.o, m.ll.o], backgroundColor: '#2b5c8f' },
+            { label: 'Realizado', data: [r_rb, r_rl, r_lb, r_ebitda, r_lair, r_ll], backgroundColor: '#e06d53' }
+          ]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: { legend: { position: 'top' } },
+          scales: { y: { ticks: { callback: v => 'R$ ' + (v/1e6).toFixed(1) + 'M' } } }
+        }
+      });
+
+      const months = getMonthsInRange();
+      const monthLabels = months.map(m => m.substring(5) + '/' + m.substring(2,4));
+      const filtered = getFilteredData();
+
+      const recO = months.map(ym => filtered.orc.filter(d => d.Categoria === 'Receita Bruta de Vendas e Serviços' && d.YearMonth === ym).reduce((a,b)=>a+b.Valor,0));
+      const recR = months.map(ym => REAL_MONTHS_SET.has(ym) ? filtered.real.filter(d => d.Categoria === 'Receita Bruta de Vendas e Serviços' && d.YearMonth === ym).reduce((a,b)=>a+b.Valor,0) : null);
+
+      const ctx2 = document.getElementById('chartExecRecTrend').getContext('2d');
+      if (chartExecRecTrendInst) chartExecRecTrendInst.destroy();
+
+      chartExecRecTrendInst = new Chart(ctx2, {
+        type: 'line',
+        data: {
+          labels: monthLabels,
+          datasets: [
+            { label: 'Orçado', data: recO, borderColor: '#2b5c8f', borderDash: [5, 5], fill: false },
+            { label: 'Realizado', data: recR, borderColor: '#e06d53', borderWidth: 3, fill: false, spanGaps: false }
+          ]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: { legend: { position: 'top' } },
+          scales: { y: { ticks: { callback: v => 'R$ ' + (v/1e6).toFixed(1) + 'M' } } }
+        }
+      });
+
+      const ebitdaO = months.map(ym => {
+        const subOrc = filtered.orc.filter(d => d.YearMonth === ym);
+        return computeDREMetrics({ orc: subOrc, real: [] }).ebitda.o;
+      });
+      const ebitdaR = months.map(ym => {
+        if (!REAL_MONTHS_SET.has(ym)) return null;
+        const subReal = filtered.real.filter(d => d.YearMonth === ym);
+        return computeDREMetrics({ orc: [], real: subReal }).ebitda.r;
+      });
+
+      const ctx3 = document.getElementById('chartExecEbitdaTrend').getContext('2d');
+      if (chartExecEbitdaTrendInst) chartExecEbitdaTrendInst.destroy();
+
+      chartExecEbitdaTrendInst = new Chart(ctx3, {
+        type: 'line',
+        data: {
+          labels: monthLabels,
+          datasets: [
+            { label: 'EBITDA Orçado', data: ebitdaO, borderColor: '#10b981', borderDash: [5, 5], fill: false },
+            { label: 'EBITDA Realizado', data: ebitdaR, borderColor: '#059669', borderWidth: 3, fill: false, spanGaps: false }
+          ]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: { legend: { position: 'top' } },
+          scales: { y: { ticks: { callback: v => 'R$ ' + (v/1e6).toFixed(1) + 'M' } } }
+        }
+      });
+    }
+
+    function updateTrendCharts() {
+      const filtered = getFilteredData();
+      const months = getMonthsInRange();
+      const monthLabels = months.map(m => m.substring(5) + '/' + m.substring(2,4));
+
+      // 1. Receita
+      const recO = months.map(ym => filtered.orc.filter(d => d.Categoria === 'Receita Bruta de Vendas e Serviços' && d.YearMonth === ym).reduce((a,b)=>a+b.Valor,0));
+      const recR = months.map(ym => REAL_MONTHS_SET.has(ym) ? filtered.real.filter(d => d.Categoria === 'Receita Bruta de Vendas e Serviços' && d.YearMonth === ym).reduce((a,b)=>a+b.Valor,0) : null);
+
+      const ctxRec = document.getElementById('chartTrendRec').getContext('2d');
+      if (chartTrendRecInst) chartTrendRecInst.destroy();
+      chartTrendRecInst = new Chart(ctxRec, {
+        type: 'line',
+        data: {
+          labels: monthLabels,
+          datasets: [
+            { label: 'Orçado', data: recO, borderColor: '#2b5c8f', borderDash: [5, 5], fill: false },
+            { label: 'Realizado', data: recR, borderColor: '#e06d53', borderWidth: 3, fill: false, spanGaps: false }
+          ]
+        },
+        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'top' } }, scales: { y: { ticks: { callback: v => 'R$ ' + (v/1e6).toFixed(1) + 'M' } } } }
+      });
+
+      // 2. EBITDA
+      const ebitdaO = months.map(ym => computeDREMetrics({ orc: filtered.orc.filter(d => d.YearMonth === ym), real: [] }).ebitda.o);
+      const ebitdaR = months.map(ym => REAL_MONTHS_SET.has(ym) ? computeDREMetrics({ orc: [], real: filtered.real.filter(d => d.YearMonth === ym) }).ebitda.r : null);
+
+      const ctxEbitda = document.getElementById('chartTrendEbitda').getContext('2d');
+      if (chartTrendEbitdaInst) chartTrendEbitdaInst.destroy();
+      chartTrendEbitdaInst = new Chart(ctxEbitda, {
+        type: 'line',
+        data: {
+          labels: monthLabels,
+          datasets: [
+            { label: 'EBITDA Orçado', data: ebitdaO, borderColor: '#10b981', borderDash: [5, 5], fill: false },
+            { label: 'EBITDA Realizado', data: ebitdaR, borderColor: '#059669', borderWidth: 3, fill: false, spanGaps: false }
+          ]
+        },
+        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'top' } }, scales: { y: { ticks: { callback: v => 'R$ ' + (v/1e6).toFixed(1) + 'M' } } } }
+      });
+
+      // 3. Despesas
+      const despO = months.map(ym => filtered.orc.filter(d => d.Categoria === 'Despesas Operacionais' && d.YearMonth === ym).reduce((a,b)=>a+b.Valor,0));
+      const despR = months.map(ym => REAL_MONTHS_SET.has(ym) ? filtered.real.filter(d => d.Categoria === 'Despesas Operacionais' && d.YearMonth === ym).reduce((a,b)=>a+b.Valor,0) : null);
+
+      const ctxDesp = document.getElementById('chartTrendDesp').getContext('2d');
+      if (chartTrendDespInst) chartTrendDespInst.destroy();
+      chartTrendDespInst = new Chart(ctxDesp, {
+        type: 'line',
+        data: {
+          labels: monthLabels,
+          datasets: [
+            { label: 'Orçado', data: despO, borderColor: '#3b82f6', borderDash: [5, 5], fill: false },
+            { label: 'Realizado', data: despR, borderColor: '#6366f1', borderWidth: 3, fill: false, spanGaps: false }
+          ]
+        },
+        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'top' } }, scales: { y: { ticks: { callback: v => 'R$ ' + (v/1e6).toFixed(1) + 'M' } } } }
+      });
+
+      // 4. Caixa Mensal
+      const entR = months.map(ym => REAL_MONTHS_SET.has(ym) ? filtered.real.filter(d => d.Classificação === 'Receita' && d.YearMonth === ym).reduce((a,b)=>a+b.Valor,0) : null);
+      const saiR = months.map(ym => REAL_MONTHS_SET.has(ym) ? filtered.real.filter(d => (d.Classificação === 'Custo' || d.Classificação === 'Despesa') && d.YearMonth === ym).reduce((a,b)=>a+b.Valor,0) : null);
+      const gerR = months.map(ym => REAL_MONTHS_SET.has(ym) ? ((entR[months.indexOf(ym)]||0) - (saiR[months.indexOf(ym)]||0)) : null);
+
+      const ctxCaixa = document.getElementById('chartTrendCaixa').getContext('2d');
+      if (chartTrendCaixaInst) chartTrendCaixaInst.destroy();
+      chartTrendCaixaInst = new Chart(ctxCaixa, {
+        type: 'bar',
+        data: {
+          labels: monthLabels,
+          datasets: [
+            { label: 'Entradas', data: entR, backgroundColor: '#10b981' },
+            { label: 'Saídas', data: saiR, backgroundColor: '#f43f5e' },
+            { label: 'Geração Líquida', data: gerR, type: 'line', borderColor: '#0f172a', borderWidth: 2, fill: false }
+          ]
+        },
+        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'top' } }, scales: { y: { ticks: { callback: v => 'R$ ' + (v/1e6).toFixed(1) + 'M' } } } }
+      });
+
+      // DFC Monthly na Tela 3
+      const ctxDFCM = document.getElementById('chartDFCMonthly').getContext('2d');
+      if (chartDFCMonthlyInst) chartDFCMonthlyInst.destroy();
+      chartDFCMonthlyInst = new Chart(ctxDFCM, {
+        type: 'bar',
+        data: {
+          labels: monthLabels,
+          datasets: [
+            { label: 'Entradas', data: entR, backgroundColor: '#10b981' },
+            { label: 'Saídas', data: saiR, backgroundColor: '#f43f5e' },
+            { label: 'Geração Líquida', data: gerR, type: 'line', borderColor: '#0f172a', borderWidth: 2.5, fill: false }
+          ]
+        },
+        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'top' } }, scales: { y: { ticks: { callback: v => 'R$ ' + (v/1e6).toFixed(1) + 'M' } } } }
+      });
+    }
+
+    // CARREGAMENTO INICIAL E POPULAÇÃO DINÂMICA DE MESES/EMPRESAS
+    window.onload = function() {
+      if (!APPS_SCRIPT_URL || APPS_SCRIPT_URL.includes("SEU_WEB_APP_ID")) {
+        document.getElementById('loader-msg').innerText = "Configure a URL válida do Apps Script na variável APPS_SCRIPT_URL.";
+        return;
+      }
+
+      fetch(APPS_SCRIPT_URL)
+        .then(res => res.json())
+        .then(json => {
+          if (json.status === "success") {
+            let rawOrcList = [];
+            let rawRealList = [];
+
+            if (json.resultado) {
+              rawOrcList = json.resultado["Base Orçado"] || [];
+              rawRealList = json.resultado["Base Realizado"] || [];
+            }
+
+            REAL_MONTHS_SET.clear();
+            const monthSet = new Set();
+            const empresaSet = new Set();
+
+            RAW_ORC = rawOrcList.map(r => {
+              const ym = parseYearMonth(r['Mês'] || r['Data']);
+              if (ym) monthSet.add(ym);
+              if (r['Empresa']) empresaSet.add(r['Empresa'].toString().trim());
+              return {
+                ID: r['ID'],
+                Empresa: (r['Empresa'] || '').toString().trim(),
+                Data: r['Data'],
+                MesStr: r['Mês'],
+                YearMonth: ym,
+                Classificação: (r['Classificação'] || '').toString().trim(),
+                Categoria: (r['Categoria'] || '').toString().trim(),
+                SubCategoria: (r['SubCategoria'] || '').toString().trim(),
+                'SubPlano de Contas': (r['SubPlano de Contas'] || '').toString().trim(),
+                Valor: parseValue(r['Valor']),
+                Tipo: 'Orçado'
+              };
+            });
+
+            RAW_REAL = rawRealList.map(r => {
+              const ym = parseYearMonth(r['Mês'] || r['Data']);
+              if (ym) {
+                monthSet.add(ym);
+                REAL_MONTHS_SET.add(ym);
+              }
+              if (r['Empresa']) empresaSet.add(r['Empresa'].toString().trim());
+              return {
+                ID: r['ID'],
+                Empresa: (r['Empresa'] || '').toString().trim(),
+                Data: r['Data'],
+                MesStr: r['Mês'],
+                YearMonth: ym,
+                Classificação: (r['Classificação'] || '').toString().trim(),
+                Categoria: (r['Categoria'] || '').toString().trim(),
+                SubCategoria: (r['SubCategoria'] || '').toString().trim(),
+                'SubPlano de Contas': (r['SubPlano de Contas'] || '').toString().trim(),
+                Valor: parseValue(r['Valor']),
+                Tipo: 'Realizado'
+              };
+            });
+
+            ALL_MONTHS_LIST = Array.from(monthSet).sort();
+
+            // POPULA SELECT DE EMPRESAS
+            const selEmp = document.getElementById('filterEmpresa');
+            selEmp.innerHTML = '<option value="TODAS">Todas as Empresas</option>';
+            Array.from(empresaSet).sort().forEach(e => {
+              selEmp.innerHTML += `<option value="${e}">${e}</option>`;
+            });
+
+            // POPULA SELECT DE MESES
+            const selStart = document.getElementById('filterMesStart');
+            const selEnd = document.getElementById('filterMesEnd');
+            selStart.innerHTML = '';
+            selEnd.innerHTML = '';
+
+            ALL_MONTHS_LIST.forEach((m) => {
+              const label = `${m.substring(5)}/${m.substring(0,4)}`;
+              selStart.innerHTML += `<option value="${m}">${label}</option>`;
+              selEnd.innerHTML += `<option value="${m}">${label}</option>`;
+            });
+
+            if (ALL_MONTHS_LIST.length > 0) {
+              selStart.value = ALL_MONTHS_LIST[0];
+              const realArray = Array.from(REAL_MONTHS_SET).sort();
+              selEnd.value = realArray.length > 0 ? realArray[realArray.length - 1] : ALL_MONTHS_LIST[ALL_MONTHS_LIST.length - 1];
+            }
+
+            document.getElementById('loader').classList.add('hidden');
+            updateDashboard();
+          } else {
+            alert("Erro ao receber dados da API: " + (json.message || "Estrutura JSON inválida."));
+            document.getElementById('loader').classList.add('hidden');
+          }
+        })
+        .catch(err => {
+          console.error(err);
+          alert("Erro na requisição fetch() com a API Google Apps Script.");
+          document.getElementById('loader').classList.add('hidden');
+        });
+    };
+  </script>
+</body>
+</html>
