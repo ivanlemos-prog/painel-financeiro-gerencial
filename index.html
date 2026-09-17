@@ -528,8 +528,98 @@
       </div>
     </div>
 
-    <!-- TELA 4 — ANÁLISE DE CATEGORIAS -->
+    <!-- TELA 4 — ANÁLISE DE CATEGORIAS & ANÁLISE DE CONTA -->
     <div id="page-categorias" class="hidden space-y-6">
+      
+      <!-- MELHORIA 3: NOVO BLOCO "ANÁLISE DE CONTA" -->
+      <div class="bg-white rounded-xl p-5 border border-slate-200 card-shadow space-y-5">
+        <div class="border-b border-slate-100 pb-3">
+          <h3 class="text-base font-bold text-slate-800 flex items-center gap-2">
+            <i class="fa-solid fa-magnifying-glass text-blue-600"></i> Análise de Conta
+          </h3>
+          <p class="text-xs text-slate-500">Pesquisa e acompanhamento individual de contas analíticas da Base Realizado</p>
+        </div>
+
+        <!-- CAMPO DE PESQUISA COM AUTOCOMPLETE -->
+        <div class="relative max-w-xl">
+          <label class="block text-xs font-bold text-slate-700 mb-1">Pesquisar conta analítica:</label>
+          <div class="relative">
+            <input type="text" id="accountSearchInput" oninput="handleAccountSearchInput(this.value)" placeholder="Digite para buscar (ex: Salários ADM, Serviços...)" class="w-full bg-slate-50 border border-slate-300 rounded-lg px-3.5 py-2 text-xs font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition pr-8">
+            <i class="fa-solid fa-magnifying-glass absolute right-3 top-2.5 text-slate-400 text-xs"></i>
+          </div>
+          <!-- LISTA DINÂMICA DE SUGESTÕES -->
+          <ul id="accountSuggestions" class="absolute z-30 left-0 right-0 mt-1 bg-white border border-slate-200 rounded-lg shadow-lg max-h-56 overflow-y-auto hidden text-xs font-medium text-slate-700 divide-y divide-slate-50"></ul>
+        </div>
+
+        <!-- MENSAGEM / ÁREA DE CONTEÚDO ANALÍTICO -->
+        <div id="accountAnalysisContent">
+          <div id="accountPlaceholderMsg" class="p-4 bg-slate-50 border border-dashed border-slate-200 rounded-lg text-center text-xs text-slate-500 font-medium">
+            Pesquise uma conta analítica para visualizar sua evolução e seus lançamentos.
+          </div>
+
+          <div id="accountResultsBlock" class="hidden space-y-5">
+            <!-- INDICADORES RESUMIDOS -->
+            <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+              <div class="bg-slate-50 p-3 rounded-lg border border-slate-200">
+                <span class="block text-[10px] font-bold uppercase text-slate-400">Conta Selecionada</span>
+                <p id="accSummaryName" class="text-xs font-extrabold text-slate-800 truncate mt-0.5" title="">-</p>
+              </div>
+              <div class="bg-slate-50 p-3 rounded-lg border border-slate-200">
+                <span class="block text-[10px] font-bold uppercase text-slate-400">Classificação</span>
+                <p id="accSummaryClass" class="text-xs font-bold text-slate-700 truncate mt-0.5">-</p>
+              </div>
+              <div class="bg-slate-50 p-3 rounded-lg border border-slate-200">
+                <span class="block text-[10px] font-bold uppercase text-slate-400">Período</span>
+                <p id="accSummaryPeriod" class="text-xs font-bold text-slate-700 truncate mt-0.5">-</p>
+              </div>
+              <div class="bg-blue-50 p-3 rounded-lg border border-blue-100">
+                <span class="block text-[10px] font-bold uppercase text-blue-700">Total Realizado</span>
+                <p id="accSummaryTotal" class="text-sm font-extrabold text-blue-900 mt-0.5">R$ 0,00</p>
+              </div>
+              <div class="bg-indigo-50 p-3 rounded-lg border border-indigo-100">
+                <span class="block text-[10px] font-bold uppercase text-indigo-700">Média Mensal</span>
+                <p id="accSummaryAvg" class="text-sm font-extrabold text-indigo-900 mt-0.5">R$ 0,00</p>
+              </div>
+              <div class="bg-emerald-50 p-3 rounded-lg border border-emerald-100">
+                <span class="block text-[10px] font-bold uppercase text-emerald-700">Maior Mês</span>
+                <p id="accSummaryMax" class="text-sm font-extrabold text-emerald-900 mt-0.5">R$ 0,00</p>
+              </div>
+            </div>
+
+            <!-- GRÁFICO DA CONTA -->
+            <div>
+              <h4 id="accChartTitle" class="text-xs font-bold text-slate-700 mb-2">Evolução Mensal</h4>
+              <div class="h-56"><canvas id="chartAccountEvolution"></canvas></div>
+            </div>
+
+            <!-- TABELA DE LANÇAMENTOS DA CONTA -->
+            <div>
+              <h4 class="text-xs font-bold text-slate-700 mb-2">Lançamentos da Conta no Período</h4>
+              <div class="overflow-x-auto max-h-72 overflow-y-auto border border-slate-200 rounded-lg">
+                <table class="w-full text-xs text-left border-collapse">
+                  <thead class="bg-slate-800 text-white uppercase text-[10px] sticky top-0">
+                    <tr>
+                      <th class="py-2.5 px-3">ID</th>
+                      <th class="py-2.5 px-3">Empresa</th>
+                      <th class="py-2.5 px-3">Data</th>
+                      <th class="py-2.5 px-3">Mês</th>
+                      <th class="py-2.5 px-3">Plano de Contas</th>
+                      <th class="py-2.5 px-3">SubPlano de Contas</th>
+                      <th class="py-2.5 px-3 text-right">Valor (R$)</th>
+                      <th class="py-2.5 px-3">Classificação</th>
+                      <th class="py-2.5 px-3">Categoria</th>
+                      <th class="py-2.5 px-3">SubCategoria</th>
+                    </tr>
+                  </thead>
+                  <tbody id="accTableBody" class="divide-y divide-slate-100 font-medium text-[11px]"></tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ANÁLISE HIERÁRQUICA DE CATEGORIAS EXISTENTE -->
       <div class="bg-white rounded-xl p-5 border border-slate-200 card-shadow">
         <div class="flex flex-wrap justify-between items-center mb-4 gap-3">
           <div>
@@ -682,6 +772,8 @@
     let REAL_MONTHS_SET = new Set();
     let DRE_MODE = 'sintetica';
 
+    let selectedAccountName = ""; // Armazena a conta analítica pesquisada
+
     let chartExecDREInst = null;
     let chartExecRecTrendInst = null;
     let chartExecEbitdaTrendInst = null;
@@ -693,6 +785,7 @@
     let chartTrendDespInst = null;
     let chartTrendCaixaInst = null;
     let chartDailyCaixaInst = null;
+    let chartAccountEvolutionInst = null; // Instância do novo gráfico por conta
 
     // NORMALIZAÇÃO DE MONETÁRIOS E DATAS
     function parseValue(val) {
@@ -754,7 +847,7 @@
     }
 
     function fmtR(val, roundedInt = false) {
-      if (val === null || val === undefined || isNaN(val)) return 'R$ 0';
+      if (val === null || val === undefined || isNaN(val)) return 'R$ 0,00';
       if (roundedInt) {
         return val.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL', maximumFractionDigits: 0, minimumFractionDigits: 0 });
       }
@@ -1122,6 +1215,11 @@
       updateMonthlyMatrix();
       updateExecCharts(m);
       updateTrendCharts();
+
+      // MELHORIA 3: RECALCULAR ANÁLISE DE CONTA AO MUDAR FILTROS GLOBAIS
+      if (selectedAccountName) {
+        renderAccountAnalysis(selectedAccountName);
+      }
     }
 
     function renderAlerts(m) {
@@ -1355,7 +1453,10 @@
 
       const totalEntradas = filtered.real.filter(d => d.Classificação === 'Receita').reduce((a,b)=>a+b.Valor,0);
 
-      Object.keys(catEntradasMap).forEach((c, idx) => {
+      // MELHORIA 2: ORDENAR ENTRADAS DE CAIXA EM ORDEM DECRESCENTE DE VALOR
+      const sortedEntradaCats = Object.keys(catEntradasMap).sort((a, b) => catEntradasMap[b].total - catEntradasMap[a].total);
+
+      sortedEntradaCats.forEach((c, idx) => {
         const cVal = catEntradasMap[c].total;
         const cPct = totalEntradas > 0 ? (cVal / totalEntradas * 100).toFixed(1) + '%' : '0,0%';
         const catId = `dfc-ent-${idx}`;
@@ -1369,7 +1470,10 @@
           <td class="py-2 px-3 text-center">${cPct}</td>
         </tr>`;
 
-        Object.keys(catEntradasMap[c].subs).forEach(s => {
+        // MELHORIA 2: ORDENAR ITEM DA SUB-CATEGORIA POR VALOR DECRESCENTE
+        const sortedEntradaSubs = Object.keys(catEntradasMap[c].subs).sort((a, b) => catEntradasMap[c].subs[b] - catEntradasMap[c].subs[a]);
+
+        sortedEntradaSubs.forEach(s => {
           const sVal = catEntradasMap[c].subs[s];
           const sPct = totalEntradas > 0 ? (sVal / totalEntradas * 100).toFixed(1) + '%' : '0,0%';
           detHtml += `<tr data-parent="${catId}" class="hidden bg-white text-slate-600 text-[11px] italic">
@@ -1450,6 +1554,9 @@
       const recebimentos = realList.filter(d => d.Classificação === 'Receita');
       const pagamentos = realList.filter(d => d.Classificação === 'Custo' || d.Classificação === 'Despesa');
 
+      // MELHORIA 1: ORDENAÇÃO DE CONTAS RECEBIDAS EM ORDEM DECRESCENTE DE VALOR NUMÉRICO REAL
+      recebimentos.sort((a, b) => b.Valor - a.Valor);
+
       const totalRec = recebimentos.reduce((a, b) => a + b.Valor, 0);
       const totalPago = pagamentos.reduce((a, b) => a + b.Valor, 0);
       const geracao = totalRec - totalPago;
@@ -1519,7 +1626,175 @@
       });
     }
 
-    // TELA 4 — ANÁLISE DE CATEGORIAS
+    // MELHORIA 3: LÓGICA DE PESQUISA POR CONTA ANALÍTICA (AUTOCOMPLETE & BLOCO DE ANÁLISE)
+    function handleAccountSearchInput(query) {
+      const suggestionsEl = document.getElementById('accountSuggestions');
+      if (!query || query.trim().length === 0) {
+        suggestionsEl.classList.add('hidden');
+        return;
+      }
+
+      const qLower = query.trim().toLowerCase();
+      
+      // Extrair dinamicamente todas as contas analíticas (SubPlano de Contas) da Base Realizado
+      const accountSet = new Set();
+      RAW_REAL.forEach(item => {
+        const acc = item['SubPlano de Contas'] || item.Categoria;
+        if (acc && acc.trim() !== '') {
+          accountSet.add(acc.trim());
+        }
+      });
+
+      // Filtrar e ordenar alfabeticamente
+      const matches = Array.from(accountSet)
+        .filter(acc => acc.toLowerCase().includes(qLower))
+        .sort((a, b) => a.localeCompare(b, 'pt-BR'));
+
+      if (matches.length === 0) {
+        suggestionsEl.innerHTML = `<li class="px-3.5 py-2 text-slate-400 italic">Nenhuma conta encontrada</li>`;
+        suggestionsEl.classList.remove('hidden');
+        return;
+      }
+
+      let html = '';
+      matches.slice(0, 15).forEach(acc => {
+        html += `<li onclick="selectAccount('${acc.replace(/'/g, "\\'")}')" class="px-3.5 py-2 hover:bg-blue-50 cursor-pointer font-medium text-slate-800 transition flex items-center gap-2">
+          <i class="fa-solid fa-file-invoice text-slate-400 text-[10px]"></i> ${acc}
+        </li>`;
+      });
+
+      suggestionsEl.innerHTML = html;
+      suggestionsEl.classList.remove('hidden');
+    }
+
+    function selectAccount(accountName) {
+      document.getElementById('accountSearchInput').value = accountName;
+      document.getElementById('accountSuggestions').classList.add('hidden');
+      selectedAccountName = accountName;
+      renderAccountAnalysis(accountName);
+    }
+
+    // Esconder sugestões se clicar fora
+    document.addEventListener('click', function(e) {
+      const searchBox = document.getElementById('accountSearchInput');
+      const suggestionsEl = document.getElementById('accountSuggestions');
+      if (searchBox && suggestionsEl && !searchBox.contains(e.target) && !suggestionsEl.contains(e.target)) {
+        suggestionsEl.classList.add('hidden');
+      }
+    });
+
+    function renderAccountAnalysis(accountName) {
+      const filtered = getFilteredData();
+      const placeholderMsg = document.getElementById('accountPlaceholderMsg');
+      const resultsBlock = document.getElementById('accountResultsBlock');
+
+      if (!accountName) {
+        placeholderMsg.innerHTML = "Pesquise uma conta analítica para visualizar sua evolução e seus lançamentos.";
+        placeholderMsg.classList.remove('hidden');
+        resultsBlock.classList.add('hidden');
+        return;
+      }
+
+      // Filtrar registros da conta selecionada respeitando os filtros globais
+      const records = filtered.real.filter(d => (d['SubPlano de Contas'] || d.Categoria) === accountName);
+
+      if (records.length === 0) {
+        placeholderMsg.innerHTML = "Não foram encontrados lançamentos para esta conta no período selecionado.";
+        placeholderMsg.classList.remove('hidden');
+        resultsBlock.classList.add('hidden');
+        return;
+      }
+
+      placeholderMsg.classList.add('hidden');
+      resultsBlock.classList.remove('hidden');
+
+      // 1. Resumo da Conta
+      const totalVal = records.reduce((acc, curr) => acc + curr.Valor, 0);
+      const monthsInRange = getMonthsInRange();
+      const monthCount = monthsInRange.length || 1;
+      const avgVal = totalVal / monthCount;
+
+      // Agrupar por mês no período selecionado para achar o maior mês e montar o gráfico
+      const monthValueMap = {};
+      monthsInRange.forEach(ym => { monthValueMap[ym] = 0; });
+      records.forEach(r => {
+        if (monthValueMap[r.YearMonth] !== undefined) {
+          monthValueMap[r.YearMonth] += r.Valor;
+        }
+      });
+
+      let maxVal = 0;
+      Object.values(monthValueMap).forEach(v => { if (v > maxVal) maxVal = v; });
+
+      const sampleRecord = records[0];
+      const classStr = sampleRecord.Classificação || '-';
+      const mStartStr = formatMonthLabel(document.getElementById('filterMesStart').value);
+      const mEndStr = formatMonthLabel(document.getElementById('filterMesEnd').value);
+
+      document.getElementById('accSummaryName').innerText = accountName;
+      document.getElementById('accSummaryName').title = accountName;
+      document.getElementById('accSummaryClass').innerText = classStr;
+      document.getElementById('accSummaryPeriod').innerText = `${mStartStr} a ${mEndStr}`;
+      document.getElementById('accSummaryTotal').innerText = fmtR(totalVal);
+      document.getElementById('accSummaryAvg').innerText = fmtR(avgVal);
+      document.getElementById('accSummaryMax').innerText = fmtR(maxVal);
+
+      // 2. Gráfico da Conta
+      document.getElementById('accChartTitle').innerText = `Evolução Mensal — ${accountName}`;
+      const chartLabels = monthsInRange.map(ym => formatMonthLabel(ym));
+      const chartData = monthsInRange.map(ym => monthValueMap[ym]);
+
+      const ctxAcc = document.getElementById('chartAccountEvolution').getContext('2d');
+      if (chartAccountEvolutionInst) chartAccountEvolutionInst.destroy();
+
+      chartAccountEvolutionInst = new Chart(ctxAcc, {
+        type: 'bar',
+        data: {
+          labels: chartLabels,
+          datasets: [{
+            label: 'Realizado (R$)',
+            data: chartData,
+            backgroundColor: '#3b82f6',
+            borderRadius: 4
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: { legend: { display: false } },
+          scales: {
+            y: { ticks: { callback: v => 'R$ ' + v.toLocaleString('pt-BR') } }
+          }
+        }
+      });
+
+      // 3. Tabela de Lançamentos da Conta (Ordenada por Data: mais antigo -> mais recente)
+      const sortedRecords = [...records].sort((a, b) => {
+        const dateA = parseDateToISO(a.Data);
+        const dateB = parseDateToISO(b.Data);
+        return dateA.localeCompare(dateB);
+      });
+
+      let tableHtml = '';
+      sortedRecords.forEach(r => {
+        tableHtml += `<tr class="hover:bg-slate-50 transition">
+          <td class="py-2 px-3 text-slate-500">${r.ID || '-'}</td>
+          <td class="py-2 px-3 font-semibold text-slate-800">${r.Empresa || '-'}</td>
+          <td class="py-2 px-3">${r.Data || '-'}</td>
+          <td class="py-2 px-3">${formatMonthLabel(r.YearMonth) || r.MesStr || '-'}</td>
+          <td class="py-2 px-3">${r['Plano de Contas'] || '-'}</td>
+          <td class="py-2 px-3 font-bold text-slate-800">${r['SubPlano de Contas'] || '-'}</td>
+          <td class="py-2 px-3 text-right font-bold text-blue-700">${fmtR(r.Valor)}</td>
+          <td class="py-2 px-3">${r.Classificação || '-'}</td>
+          <td class="py-2 px-3">${r.Categoria || '-'}</td>
+          <td class="py-2 px-3">${r.SubCategoria || '-'}</td>
+        </tr>`;
+      });
+
+      document.getElementById('accTableBody').innerHTML = tableHtml;
+    }
+
+    // TELA 4 — ANÁLISE DE CATEGORIAS (HISTÓRICO HIERÁRQUICO)
     function updateCategoriasTable() {
       const filtered = getFilteredData();
       const filterClass = document.getElementById('filterClassificacao').value;
