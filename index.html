@@ -8,6 +8,8 @@
   <script src="https://cdn.tailwindcss.com"></script>
   <!-- Chart.js CDN -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <!-- SheetJS (xlsx) CDN para Exportação Excel Nativa e Estruturada -->
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
   <!-- FontAwesome CDN -->
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
   <style>
@@ -18,14 +20,25 @@
     ::-webkit-scrollbar { width: 6px; height: 6px; }
     ::-webkit-scrollbar-track { background: #f1f5f9; }
     ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
+
+    /* ESTILOS DE IMPRESSÃO GERENCIAL OPTIMIZADOS */
     @media print {
       header, nav, .no-print { display: none !important; }
-      body { background-color: white; color: black; }
-      .card-shadow { box-shadow: none !important; border: 1px solid #ccc !important; }
+      body { background-color: white !important; color: black !important; font-size: 10pt; }
+      .card-shadow { box-shadow: none !important; border: 1px solid #e2e8f0 !important; }
+      .print-area { display: block !important; width: 100% !important; margin: 0 !important; padding: 0 !important; }
+      .page-break { page-break-before: always; }
+      .no-break { page-break-inside: avoid; }
+      /* Força a exibição exclusiva do elemento isolado quando em modo print-standalone */
+      body.printing-isolated > *:not(#print-isolated-container) { display: none !important; }
+      #print-isolated-container { display: block !important; width: 100% !important; margin: 0 !important; padding: 0 !important; }
     }
   </style>
 </head>
 <body class="min-h-screen flex flex-col">
+
+  <!-- CONTAINER DE IMPRESSÃO ISOLADA -->
+  <div id="print-isolated-container" class="hidden"></div>
 
   <!-- OVERLAY DE CARREGAMENTO -->
   <div id="loader" class="fixed inset-0 bg-slate-900/80 z-50 flex flex-col items-center justify-center text-white">
@@ -130,6 +143,9 @@
         <button onclick="switchTab('tendencias')" id="tab-tendencias" class="nav-tab px-4 py-2.5 text-xs font-semibold text-slate-300 hover:text-white flex items-center gap-2 transition">
           <i class="fa-solid fa-chart-line"></i> Tendências e Sazonalidade
         </button>
+        <button onclick="switchTab('planocontas')" id="tab-planocontas" class="nav-tab px-4 py-2.5 text-xs font-semibold text-slate-300 hover:text-white flex items-center gap-2 transition">
+          <i class="fa-solid fa-list-tree"></i> Plano de Contas
+        </button>
       </div>
     </div>
   </header>
@@ -139,6 +155,11 @@
 
     <!-- TELA 1 — VISÃO EXECUTIVA -->
     <div id="page-executiva" class="space-y-6">
+      <div class="flex justify-end no-print">
+        <button onclick="printPage('page-executiva', 'Visão Executiva')" class="bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs px-3 py-1.5 rounded-md transition font-medium flex items-center gap-1.5 shadow-sm">
+          <i class="fa-solid fa-print"></i> Imprimir / PDF
+        </button>
+      </div>
       
       <!-- KPIS PRINCIPAIS -->
       <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -334,7 +355,10 @@
           <div class="flex items-center gap-2 no-print">
             <button onclick="toggleDREMode('sintetica')" id="btnDRESintetica" class="bg-slate-900 text-white text-xs px-3 py-1.5 rounded-md font-medium transition">Sintética</button>
             <button onclick="toggleDREMode('detalhada')" id="btnDREDetalhada" class="bg-slate-100 text-slate-700 text-xs px-3 py-1.5 rounded-md font-medium hover:bg-slate-200 transition">Detalhada (Expansível)</button>
-            <button onclick="window.print()" class="bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs px-3 py-1.5 rounded-md transition font-medium flex items-center gap-1.5">
+            <button onclick="exportDREToExcel()" class="bg-emerald-600 hover:bg-emerald-700 text-white text-xs px-3 py-1.5 rounded-md transition font-medium flex items-center gap-1.5 shadow-sm">
+              <i class="fa-solid fa-file-excel"></i> Excel
+            </button>
+            <button onclick="printPage('page-dre', 'DRE Gerencial')" class="bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs px-3 py-1.5 rounded-md transition font-medium flex items-center gap-1.5">
               <i class="fa-solid fa-print"></i> Imprimir / PDF
             </button>
           </div>
@@ -361,7 +385,7 @@
     <div id="page-dfc" class="hidden space-y-6">
       
       <!-- CARDS DFC -->
-      <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div id="dfc-cards-block" class="grid grid-cols-1 md:grid-cols-3 gap-4">
         <div class="p-4 bg-emerald-50 rounded-xl border border-emerald-100 card-shadow">
           <div class="flex justify-between items-center">
             <span class="text-xs text-emerald-700 font-extrabold uppercase tracking-wider">Total de Entradas</span>
@@ -389,24 +413,36 @@
       </div>
 
       <!-- 1. BLOCO DFC: EVOLUÇÃO MENSAL (GRÁFICO) -->
-      <div class="bg-white rounded-xl p-5 border border-slate-200 card-shadow">
-        <div class="mb-4">
-          <h3 class="text-sm font-bold text-slate-800">Evolução Mensal do Fluxo de Caixa (Regime de Caixa)</h3>
-          <p class="text-xs text-slate-500">Comparação das entradas, saídas e geração líquida mês a mês</p>
+      <div id="dfc-block-chart" class="bg-white rounded-xl p-5 border border-slate-200 card-shadow">
+        <div class="flex justify-between items-center mb-4">
+          <div>
+            <h3 class="text-sm font-bold text-slate-800">Evolução Mensal do Fluxo de Caixa (Regime de Caixa)</h3>
+            <p class="text-xs text-slate-500">Comparação das entradas, saídas e geração líquida mês a mês</p>
+          </div>
+          <div class="no-print">
+            <button onclick="printElement('dfc-block-chart', 'Evolução Mensal do Fluxo de Caixa')" class="bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs px-3 py-1.5 rounded-md transition font-medium flex items-center gap-1.5">
+              <i class="fa-solid fa-print"></i> Imprimir / PDF
+            </button>
+          </div>
         </div>
         <div class="h-64"><canvas id="chartDFCMonthly"></canvas></div>
       </div>
 
       <!-- 2. BLOCO DFC: FLUXO DE CAIXA GERENCIAL MENSAL (MATRIZ) -->
-      <div class="bg-white rounded-xl p-5 border border-slate-200 card-shadow">
+      <div id="dfc-block-matrix" class="bg-white rounded-xl p-5 border border-slate-200 card-shadow">
         <div class="flex justify-between items-center mb-4">
           <div>
             <h3 class="text-base font-bold text-slate-800">Fluxo de Caixa Gerencial Mensal</h3>
             <p class="text-xs text-slate-500">Resumo financeiro das movimentações efetivas</p>
           </div>
-          <button onclick="window.print()" class="bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs px-3 py-1.5 rounded-md transition font-medium no-print flex items-center gap-1.5">
-            <i class="fa-solid fa-print"></i> Imprimir / PDF
-          </button>
+          <div class="flex items-center gap-2 no-print">
+            <button onclick="exportDFCMonthlyToExcel()" class="bg-emerald-600 hover:bg-emerald-700 text-white text-xs px-3 py-1.5 rounded-md transition font-medium flex items-center gap-1.5 shadow-sm">
+              <i class="fa-solid fa-file-excel"></i> Excel
+            </button>
+            <button onclick="printElement('dfc-block-matrix', 'Fluxo de Caixa Gerencial Mensal')" class="bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs px-3 py-1.5 rounded-md transition font-medium flex items-center gap-1.5">
+              <i class="fa-solid fa-print"></i> Imprimir / PDF
+            </button>
+          </div>
         </div>
         <div class="overflow-x-auto">
           <table class="w-full text-xs text-left border-collapse">
@@ -417,10 +453,20 @@
       </div>
 
       <!-- 3. BLOCO DFC: DETALHAMENTO HIERÁRQUICO -->
-      <div class="bg-white rounded-xl p-5 border border-slate-200 card-shadow">
-        <div class="mb-4">
-          <h3 class="text-base font-bold text-slate-800">Detalhamento Hierárquico do Fluxo de Caixa</h3>
-          <p class="text-xs text-slate-500">Expansão por Categoria → Subcategoria → SubPlano de Contas</p>
+      <div id="dfc-block-hierarchical" class="bg-white rounded-xl p-5 border border-slate-200 card-shadow">
+        <div class="flex justify-between items-center mb-4">
+          <div>
+            <h3 class="text-base font-bold text-slate-800">Detalhamento Hierárquico do Fluxo de Caixa</h3>
+            <p class="text-xs text-slate-500">Expansão por Categoria → Subcategoria → SubPlano de Contas</p>
+          </div>
+          <div class="flex items-center gap-2 no-print">
+            <button onclick="exportDFCHierarchicalToExcel()" class="bg-emerald-600 hover:bg-emerald-700 text-white text-xs px-3 py-1.5 rounded-md transition font-medium flex items-center gap-1.5 shadow-sm">
+              <i class="fa-solid fa-file-excel"></i> Excel
+            </button>
+            <button onclick="printElement('dfc-block-hierarchical', 'Detalhamento Hierárquico do Fluxo de Caixa')" class="bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs px-3 py-1.5 rounded-md transition font-medium flex items-center gap-1.5">
+              <i class="fa-solid fa-print"></i> Imprimir / PDF
+            </button>
+          </div>
         </div>
         <div class="overflow-x-auto">
           <table class="w-full text-xs text-left border-collapse">
@@ -437,7 +483,7 @@
       </div>
 
       <!-- 4. BLOCO DFC: VISÃO DIÁRIA -->
-      <div class="bg-white rounded-xl p-5 border border-slate-200 card-shadow space-y-4">
+      <div id="dfc-block-daily" class="bg-white rounded-xl p-5 border border-slate-200 card-shadow space-y-4">
         <div class="flex flex-wrap justify-between items-center gap-3">
           <div>
             <h3 class="text-base font-bold text-slate-800 flex items-center gap-2">
@@ -453,6 +499,14 @@
             <div>
               <label class="block text-[10px] uppercase font-bold text-slate-400 mb-0.5">Data Final</label>
               <input type="date" id="dailyDateEnd" onchange="updateDailyView()" class="bg-slate-100 text-slate-800 text-xs rounded-md px-2.5 py-1 border border-slate-300 focus:outline-none font-medium">
+            </div>
+            <div class="self-end flex items-center gap-2">
+              <button onclick="exportDFCDailyToExcel()" class="bg-emerald-600 hover:bg-emerald-700 text-white text-xs px-3 py-1.5 rounded-md transition font-medium flex items-center gap-1.5 shadow-sm">
+                <i class="fa-solid fa-file-excel"></i> Excel
+              </button>
+              <button onclick="printElement('dfc-block-daily', 'Visão Diária de Caixa')" class="bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs px-3 py-1.5 rounded-md transition font-medium flex items-center gap-1.5">
+                <i class="fa-solid fa-print"></i> Imprimir / PDF
+              </button>
             </div>
           </div>
         </div>
@@ -528,41 +582,57 @@
       </div>
     </div>
 
-    <!-- TELA 4 — ANÁLISE DE CATEGORIAS & ANÁLISE DE CONTA -->
+    <!-- TELA 4 — ANÁLISE DE CATEGORIAS & ANÁLISE MULTI-NÍVEL DA ESTRUTURA GERENCIAL -->
     <div id="page-categorias" class="hidden space-y-6">
       
-      <!-- MELHORIA 3: NOVO BLOCO "ANÁLISE DE CONTA" -->
-      <div class="bg-white rounded-xl p-5 border border-slate-200 card-shadow space-y-5">
-        <div class="border-b border-slate-100 pb-3">
-          <h3 class="text-base font-bold text-slate-800 flex items-center gap-2">
-            <i class="fa-solid fa-magnifying-glass text-blue-600"></i> Análise de Conta
-          </h3>
-          <p class="text-xs text-slate-500">Pesquisa e acompanhamento individual de contas analíticas da Base Realizado</p>
+      <!-- BLOCO AMPLIADO: PESQUISA GERENCIAL MULTI-NÍVEL -->
+      <div id="search-analysis-block" class="bg-white rounded-xl p-5 border border-slate-200 card-shadow space-y-5">
+        <div class="border-b border-slate-100 pb-3 flex flex-wrap justify-between items-center gap-3">
+          <div>
+            <h3 class="text-base font-bold text-slate-800 flex items-center gap-2">
+              <i class="fa-solid fa-magnifying-glass text-blue-600"></i> Pesquisa Gerencial Multi-Nível
+            </h3>
+            <p class="text-xs text-slate-500">Pesquisa e acompanhamento gerencial por Conta Analítica, Plano de Contas, Categoria ou SubCategoria</p>
+          </div>
         </div>
 
-        <!-- CAMPO DE PESQUISA COM AUTOCOMPLETE -->
-        <div class="relative max-w-xl">
-          <label class="block text-xs font-bold text-slate-700 mb-1">Pesquisar conta analítica:</label>
-          <div class="relative">
-            <input type="text" id="accountSearchInput" oninput="handleAccountSearchInput(this.value)" placeholder="Digite para buscar (ex: Salários ADM, Serviços...)" class="w-full bg-slate-50 border border-slate-300 rounded-lg px-3.5 py-2 text-xs font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition pr-8">
-            <i class="fa-solid fa-magnifying-glass absolute right-3 top-2.5 text-slate-400 text-xs"></i>
+        <!-- SELETOR DE NÍVEL E CAMPO DE PESQUISA COM AUTOCOMPLETE -->
+        <div class="flex flex-col sm:flex-row items-stretch sm:items-end gap-3 max-w-3xl no-print">
+          <div class="w-full sm:w-48">
+            <label class="block text-xs font-bold text-slate-700 mb-1">Pesquisar por:</label>
+            <select id="searchLevelSelect" onchange="handleSearchLevelChange()" class="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 text-xs font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500 transition">
+              <option value="Conta Analítica">Conta Analítica</option>
+              <option value="Plano de Contas">Plano de Contas</option>
+              <option value="Categoria">Categoria</option>
+              <option value="SubCategoria">SubCategoria</option>
+            </select>
           </div>
-          <!-- LISTA DINÂMICA DE SUGESTÕES -->
-          <ul id="accountSuggestions" class="absolute z-30 left-0 right-0 mt-1 bg-white border border-slate-200 rounded-lg shadow-lg max-h-56 overflow-y-auto hidden text-xs font-medium text-slate-700 divide-y divide-slate-50"></ul>
+
+          <div class="relative flex-1">
+            <label class="block text-xs font-bold text-slate-700 mb-1">Item a pesquisar:</label>
+            <div class="relative">
+              <input type="text" id="accountSearchInput" oninput="handleAccountSearchInput(this.value)" placeholder="Digite para buscar..." class="w-full bg-slate-50 border border-slate-300 rounded-lg px-3.5 py-2 text-xs font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition pr-8">
+              <i class="fa-solid fa-magnifying-glass absolute right-3 top-2.5 text-slate-400 text-xs"></i>
+            </div>
+            <!-- LISTA DINÂMICA DE SUGESTÕES -->
+            <ul id="accountSuggestions" class="absolute z-30 left-0 right-0 mt-1 bg-white border border-slate-200 rounded-lg shadow-lg max-h-56 overflow-y-auto hidden text-xs font-medium text-slate-700 divide-y divide-slate-50"></ul>
+          </div>
         </div>
 
         <!-- MENSAGEM / ÁREA DE CONTEÚDO ANALÍTICO -->
         <div id="accountAnalysisContent">
           <div id="accountPlaceholderMsg" class="p-4 bg-slate-50 border border-dashed border-slate-200 rounded-lg text-center text-xs text-slate-500 font-medium">
-            Pesquise uma conta analítica para visualizar sua evolução e seus lançamentos.
+            Selecione o nível e pesquise um item para visualizar sua evolução e seus lançamentos.
           </div>
 
           <div id="accountResultsBlock" class="hidden space-y-5">
-            <!-- INDICADORES RESUMIDOS -->
-            <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
-              <div class="bg-slate-50 p-3 rounded-lg border border-slate-200">
-                <span class="block text-[10px] font-bold uppercase text-slate-400">Conta Selecionada</span>
+            <!-- IDENTIFICAÇÃO HIERÁRQUICA E INDICADORES RESUMIDOS -->
+            <div class="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-3">
+              <div class="bg-slate-50 p-3 rounded-lg border border-slate-200 col-span-2 sm:col-span-2 lg:col-span-2">
+                <span class="block text-[10px] font-bold uppercase text-slate-400" id="lblAccSummaryName">Item Selecionado</span>
                 <p id="accSummaryName" class="text-xs font-extrabold text-slate-800 truncate mt-0.5" title="">-</p>
+                <!-- IDENTIFICAÇÃO HIERÁRQUICA DISCRETA COM MAIOR CONTA ANALÍTICA -->
+                <div id="accHierarchyBadge" class="mt-1 pt-1 border-t border-slate-200 text-[10px] text-slate-500 flex flex-wrap gap-x-2 gap-y-0.5"></div>
               </div>
               <div class="bg-slate-50 p-3 rounded-lg border border-slate-200">
                 <span class="block text-[10px] font-bold uppercase text-slate-400">Classificação</span>
@@ -580,23 +650,40 @@
                 <span class="block text-[10px] font-bold uppercase text-indigo-700">Média Mensal</span>
                 <p id="accSummaryAvg" class="text-sm font-extrabold text-indigo-900 mt-0.5">R$ 0,00</p>
               </div>
-              <div class="bg-emerald-50 p-3 rounded-lg border border-emerald-100">
+              <div class="bg-emerald-50 p-3 rounded-lg border border-emerald-100 col-span-2 sm:col-span-2 lg:col-span-2">
                 <span class="block text-[10px] font-bold uppercase text-emerald-700">Maior Mês</span>
                 <p id="accSummaryMax" class="text-sm font-extrabold text-emerald-900 mt-0.5">R$ 0,00</p>
               </div>
             </div>
 
-            <!-- GRÁFICO DA CONTA -->
-            <div>
-              <h4 id="accChartTitle" class="text-xs font-bold text-slate-700 mb-2">Evolução Mensal</h4>
+            <!-- GRÁFICO DA CONTA / NÍVEL PESQUISADO -->
+            <div id="acc-chart-container" class="bg-white rounded-lg p-2 border border-slate-100">
+              <div class="flex justify-between items-center mb-2">
+                <h4 id="accChartTitle" class="text-xs font-bold text-slate-700">Evolução Mensal</h4>
+                <div class="no-print">
+                  <button onclick="printAccountGraph()" class="bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs px-2.5 py-1 rounded transition font-medium flex items-center gap-1">
+                    <i class="fa-solid fa-print"></i> Imprimir / PDF
+                  </button>
+                </div>
+              </div>
               <div class="h-56"><canvas id="chartAccountEvolution"></canvas></div>
             </div>
 
-            <!-- TABELA DE LANÇAMENTOS DA CONTA -->
-            <div>
-              <h4 class="text-xs font-bold text-slate-700 mb-2">Lançamentos da Conta no Período</h4>
+            <!-- TABELA DE LANÇAMENTOS NO PERÍODO -->
+            <div id="acc-table-container" class="bg-white rounded-lg p-2 border border-slate-100">
+              <div class="flex justify-between items-center mb-2">
+                <h4 id="accTableTitle" class="text-xs font-bold text-slate-700">Lançamentos no Período</h4>
+                <div class="flex items-center gap-2 no-print">
+                  <button onclick="exportSearchTableToExcel()" class="bg-emerald-600 hover:bg-emerald-700 text-white text-xs px-2.5 py-1 rounded transition font-medium flex items-center gap-1 shadow-sm">
+                    <i class="fa-solid fa-file-excel"></i> Excel
+                  </button>
+                  <button onclick="printSearchTable()" class="bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs px-2.5 py-1 rounded transition font-medium flex items-center gap-1">
+                    <i class="fa-solid fa-print"></i> Imprimir / PDF
+                  </button>
+                </div>
+              </div>
               <div class="overflow-x-auto max-h-72 overflow-y-auto border border-slate-200 rounded-lg">
-                <table class="w-full text-xs text-left border-collapse">
+                <table id="tableAccLaunch" class="w-full text-xs text-left border-collapse">
                   <thead class="bg-slate-800 text-white uppercase text-[10px] sticky top-0">
                     <tr>
                       <th class="py-2.5 px-3">ID</th>
@@ -620,7 +707,7 @@
       </div>
 
       <!-- ANÁLISE HIERÁRQUICA DE CATEGORIAS EXISTENTE -->
-      <div class="bg-white rounded-xl p-5 border border-slate-200 card-shadow">
+      <div id="categories-hierarchical-block" class="bg-white rounded-xl p-5 border border-slate-200 card-shadow">
         <div class="flex flex-wrap justify-between items-center mb-4 gap-3">
           <div>
             <h3 class="text-base font-bold text-slate-800">Análise de Categorias & Desvios Orçamentários</h3>
@@ -634,6 +721,11 @@
               <option value="Custo">Custos (CMV/CSP)</option>
               <option value="Despesa">Despesas</option>
             </select>
+            <div class="no-print">
+              <button onclick="exportCategoriasToExcel()" class="bg-emerald-600 hover:bg-emerald-700 text-white text-xs px-3 py-1.5 rounded-md transition font-medium flex items-center gap-1.5 shadow-sm">
+                <i class="fa-solid fa-file-excel"></i> Excel (Lançamentos)
+              </button>
+            </div>
           </div>
         </div>
 
@@ -656,6 +748,12 @@
 
     <!-- TELA 5 — TENDÊNCIAS E SAZONALIDADE -->
     <div id="page-tendencias" class="hidden space-y-6">
+      <div class="flex justify-end no-print">
+        <button onclick="printPage('page-tendencias', 'Tendências e Sazonalidade')" class="bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs px-3 py-1.5 rounded-md transition font-medium flex items-center gap-1.5 shadow-sm">
+          <i class="fa-solid fa-print"></i> Imprimir / PDF
+        </button>
+      </div>
+
       <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <!-- Receita Mensal -->
         <div class="bg-white rounded-xl p-5 border border-slate-200 card-shadow">
@@ -755,6 +853,51 @@
       </div>
     </div>
 
+    <!-- TELA 6 — NOVA ABA: PLANO DE CONTAS -->
+    <div id="page-planocontas" class="hidden space-y-6">
+      <div class="bg-white rounded-xl p-5 border border-slate-200 card-shadow">
+        <div class="flex flex-wrap justify-between items-center mb-4 gap-3 border-b border-slate-100 pb-3">
+          <div>
+            <h3 class="text-base font-bold text-slate-800 flex items-center gap-2">
+              <i class="fa-solid fa-list-tree text-blue-600"></i> Estrutura do Plano de Contas
+            </h3>
+            <p class="text-xs text-slate-500">Mapeamento hierárquico da arquitetura contábil/gerencial derivada da Base Realizado</p>
+          </div>
+          <div class="flex items-center gap-2 no-print">
+            <button onclick="expandAllPlanoContas()" class="bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs px-3 py-1.5 rounded-md transition font-medium">
+              <i class="fa-solid fa-folder-open mr-1"></i> Expansão Completa
+            </button>
+            <button onclick="collapseAllPlanoContas()" class="bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs px-3 py-1.5 rounded-md transition font-medium">
+              <i class="fa-solid fa-folder mr-1"></i> Recolher Tudo
+            </button>
+            <button onclick="exportPlanoContasToExcel()" class="bg-emerald-600 hover:bg-emerald-700 text-white text-xs px-3 py-1.5 rounded-md transition font-medium flex items-center gap-1.5 shadow-sm">
+              <i class="fa-solid fa-file-excel"></i> Excel
+            </button>
+            <button onclick="printPage('page-planocontas', 'Plano de Contas - Estrutura Gerencial')" class="bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs px-3 py-1.5 rounded-md transition font-medium flex items-center gap-1.5">
+              <i class="fa-solid fa-print"></i> Imprimir / PDF
+            </button>
+          </div>
+        </div>
+
+        <div class="p-3 bg-slate-50 rounded-lg border border-slate-200 text-xs text-slate-600 mb-4">
+          <i class="fa-solid fa-circle-info text-blue-500 mr-1.5"></i>
+          Esta visualização apresenta o <strong>desenho estrutural da base contábil</strong> (Classificação → Categoria → SubCategoria → Plano de Contas → Conta Analítica/SubPlano) conforme carregado. Contas cadastradas sem lançamentos no filtro do mês permanecem visíveis para preservar o mapeamento da empresa.
+        </div>
+
+        <div class="overflow-x-auto">
+          <table class="w-full text-xs text-left border-collapse">
+            <thead>
+              <tr class="bg-slate-900 text-white uppercase text-[11px] tracking-wider">
+                <th class="py-2.5 px-4 rounded-l-lg">Hierarquia / Agrupamento Contábil</th>
+                <th class="py-2.5 px-4 text-center rounded-r-lg">Nível Gerencial</th>
+              </tr>
+            </thead>
+            <tbody id="tablePlanoContasBody" class="divide-y divide-slate-100 font-medium"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
   </main>
 
   <footer class="bg-slate-900 text-slate-400 border-t border-slate-800 py-4 mt-auto text-center text-xs no-print">
@@ -772,7 +915,8 @@
     let REAL_MONTHS_SET = new Set();
     let DRE_MODE = 'sintetica';
 
-    let selectedAccountName = ""; // Armazena a conta analítica pesquisada
+    let selectedAccountName = ""; // Armazena a conta/item pesquisado
+    let selectedSearchLevel = "Conta Analítica"; // Armazena o nível gerencial de pesquisa selecionado
 
     let chartExecDREInst = null;
     let chartExecRecTrendInst = null;
@@ -785,7 +929,7 @@
     let chartTrendDespInst = null;
     let chartTrendCaixaInst = null;
     let chartDailyCaixaInst = null;
-    let chartAccountEvolutionInst = null; // Instância do novo gráfico por conta
+    let chartAccountEvolutionInst = null; // Instância do gráfico por conta/nível
 
     // NORMALIZAÇÃO DE MONETÁRIOS E DATAS
     function parseValue(val) {
@@ -1215,8 +1359,9 @@
       updateMonthlyMatrix();
       updateExecCharts(m);
       updateTrendCharts();
+      updatePlanoContasTable();
 
-      // MELHORIA 3: RECALCULAR ANÁLISE DE CONTA AO MUDAR FILTROS GLOBAIS
+      // RECALCULAR ANÁLISE GERENCIAL AO MUDAR FILTROS GLOBAIS
       if (selectedAccountName) {
         renderAccountAnalysis(selectedAccountName);
       }
@@ -1453,7 +1598,6 @@
 
       const totalEntradas = filtered.real.filter(d => d.Classificação === 'Receita').reduce((a,b)=>a+b.Valor,0);
 
-      // MELHORIA 2: ORDENAR ENTRADAS DE CAIXA EM ORDEM DECRESCENTE DE VALOR
       const sortedEntradaCats = Object.keys(catEntradasMap).sort((a, b) => catEntradasMap[b].total - catEntradasMap[a].total);
 
       sortedEntradaCats.forEach((c, idx) => {
@@ -1470,7 +1614,6 @@
           <td class="py-2 px-3 text-center">${cPct}</td>
         </tr>`;
 
-        // MELHORIA 2: ORDENAR ITEM DA SUB-CATEGORIA POR VALOR DECRESCENTE
         const sortedEntradaSubs = Object.keys(catEntradasMap[c].subs).sort((a, b) => catEntradasMap[c].subs[b] - catEntradasMap[c].subs[a]);
 
         sortedEntradaSubs.forEach(s => {
@@ -1554,7 +1697,6 @@
       const recebimentos = realList.filter(d => d.Classificação === 'Receita');
       const pagamentos = realList.filter(d => d.Classificação === 'Custo' || d.Classificação === 'Despesa');
 
-      // MELHORIA 1: ORDENAÇÃO DE CONTAS RECEBIDAS EM ORDEM DECRESCENTE DE VALOR NUMÉRICO REAL
       recebimentos.sort((a, b) => b.Valor - a.Valor);
 
       const totalRec = recebimentos.reduce((a, b) => a + b.Valor, 0);
@@ -1626,7 +1768,37 @@
       });
     }
 
-    // MELHORIA 3: LÓGICA DE PESQUISA POR CONTA ANALÍTICA (AUTOCOMPLETE & BLOCO DE ANÁLISE)
+    // PESQUISA GERENCIAL MULTI-NÍVEL (AUTOCOMPLETE, MAPPING & ANÁLISE HIERÁRQUICA)
+    function handleSearchLevelChange() {
+      const levelSelect = document.getElementById('searchLevelSelect');
+      selectedSearchLevel = levelSelect ? levelSelect.value : "Conta Analítica";
+      
+      const searchInput = document.getElementById('accountSearchInput');
+      if (searchInput) {
+        searchInput.value = "";
+        if (selectedSearchLevel === "Conta Analítica") {
+          searchInput.placeholder = "Digite para buscar conta analítica (ex: AVISO PRÉVIO...)";
+        } else if (selectedSearchLevel === "Plano de Contas") {
+          searchInput.placeholder = "Digite para buscar plano de contas...";
+        } else if (selectedSearchLevel === "Categoria") {
+          searchInput.placeholder = "Digite para buscar categoria (ex: Despesas Operacionais...)";
+        } else if (selectedSearchLevel === "SubCategoria") {
+          searchInput.placeholder = "Digite para buscar subcategoria (ex: Salários e Encargos...)";
+        }
+      }
+
+      document.getElementById('accountSuggestions').classList.add('hidden');
+      selectedAccountName = "";
+      renderAccountAnalysis("");
+    }
+
+    function getTargetFieldName(level) {
+      if (level === "Plano de Contas") return "Plano de Contas";
+      if (level === "Categoria") return "Categoria";
+      if (level === "SubCategoria") return "SubCategoria";
+      return "SubPlano de Contas"; // Padrão: Conta Analítica / SubPlano de Contas
+    }
+
     function handleAccountSearchInput(query) {
       const suggestionsEl = document.getElementById('accountSuggestions');
       if (!query || query.trim().length === 0) {
@@ -1635,31 +1807,36 @@
       }
 
       const qLower = query.trim().toLowerCase();
+      const targetField = getTargetFieldName(selectedSearchLevel);
       
-      // Extrair dinamicamente todas as contas analíticas (SubPlano de Contas) da Base Realizado
-      const accountSet = new Set();
+      const itemSet = new Set();
       RAW_REAL.forEach(item => {
-        const acc = item['SubPlano de Contas'] || item.Categoria;
-        if (acc && acc.trim() !== '') {
-          accountSet.add(acc.trim());
+        let val = item[targetField];
+        if (!val && targetField === "SubPlano de Contas") {
+          val = item.Categoria;
+        }
+        if (val !== null && val !== undefined) {
+          const strVal = val.toString().trim();
+          if (strVal !== "" && strVal !== "-" && strVal !== "null" && strVal !== "undefined") {
+            itemSet.add(strVal);
+          }
         }
       });
 
-      // Filtrar e ordenar alfabeticamente
-      const matches = Array.from(accountSet)
-        .filter(acc => acc.toLowerCase().includes(qLower))
+      const matches = Array.from(itemSet)
+        .filter(item => item.toLowerCase().includes(qLower))
         .sort((a, b) => a.localeCompare(b, 'pt-BR'));
 
       if (matches.length === 0) {
-        suggestionsEl.innerHTML = `<li class="px-3.5 py-2 text-slate-400 italic">Nenhuma conta encontrada</li>`;
+        suggestionsEl.innerHTML = `<li class="px-3.5 py-2 text-slate-400 italic">Nenhum registro encontrado</li>`;
         suggestionsEl.classList.remove('hidden');
         return;
       }
 
       let html = '';
-      matches.slice(0, 15).forEach(acc => {
-        html += `<li onclick="selectAccount('${acc.replace(/'/g, "\\'")}')" class="px-3.5 py-2 hover:bg-blue-50 cursor-pointer font-medium text-slate-800 transition flex items-center gap-2">
-          <i class="fa-solid fa-file-invoice text-slate-400 text-[10px]"></i> ${acc}
+      matches.slice(0, 15).forEach(item => {
+        html += `<li onclick="selectAccount('${item.replace(/'/g, "\\'")}')" class="px-3.5 py-2 hover:bg-blue-50 cursor-pointer font-medium text-slate-800 transition flex items-center gap-2">
+          <i class="fa-solid fa-file-invoice text-slate-400 text-[10px]"></i> ${item}
         </li>`;
       });
 
@@ -1667,11 +1844,11 @@
       suggestionsEl.classList.remove('hidden');
     }
 
-    function selectAccount(accountName) {
-      document.getElementById('accountSearchInput').value = accountName;
+    function selectAccount(itemName) {
+      document.getElementById('accountSearchInput').value = itemName;
       document.getElementById('accountSuggestions').classList.add('hidden');
-      selectedAccountName = accountName;
-      renderAccountAnalysis(accountName);
+      selectedAccountName = itemName;
+      renderAccountAnalysis(itemName);
     }
 
     // Esconder sugestões se clicar fora
@@ -1683,23 +1860,31 @@
       }
     });
 
-    function renderAccountAnalysis(accountName) {
+    function renderAccountAnalysis(itemName) {
       const filtered = getFilteredData();
       const placeholderMsg = document.getElementById('accountPlaceholderMsg');
       const resultsBlock = document.getElementById('accountResultsBlock');
 
-      if (!accountName) {
-        placeholderMsg.innerHTML = "Pesquise uma conta analítica para visualizar sua evolução e seus lançamentos.";
+      if (!itemName) {
+        placeholderMsg.innerHTML = "Selecione o nível e pesquise um item para visualizar sua evolução e seus lançamentos.";
         placeholderMsg.classList.remove('hidden');
         resultsBlock.classList.add('hidden');
         return;
       }
 
-      // Filtrar registros da conta selecionada respeitando os filtros globais
-      const records = filtered.real.filter(d => (d['SubPlano de Contas'] || d.Categoria) === accountName);
+      const targetField = getTargetFieldName(selectedSearchLevel);
+
+      // Filtrar registros respeitando o nível pesquisado e os filtros globais (Empresa + Período)
+      const records = filtered.real.filter(d => {
+        let val = d[targetField];
+        if (!val && targetField === "SubPlano de Contas") {
+          val = d.Categoria;
+        }
+        return val && val.toString().trim() === itemName;
+      });
 
       if (records.length === 0) {
-        placeholderMsg.innerHTML = "Não foram encontrados lançamentos para esta conta no período selecionado.";
+        placeholderMsg.innerHTML = `Não foram encontrados lançamentos para "${itemName}" (${selectedSearchLevel}) no período/empresa selecionados.`;
         placeholderMsg.classList.remove('hidden');
         resultsBlock.classList.add('hidden');
         return;
@@ -1708,13 +1893,12 @@
       placeholderMsg.classList.add('hidden');
       resultsBlock.classList.remove('hidden');
 
-      // 1. Resumo da Conta
+      // 1. Resumo do Item
       const totalVal = records.reduce((acc, curr) => acc + curr.Valor, 0);
       const monthsInRange = getMonthsInRange();
       const monthCount = monthsInRange.length || 1;
       const avgVal = totalVal / monthCount;
 
-      // Agrupar por mês no período selecionado para achar o maior mês e montar o gráfico
       const monthValueMap = {};
       monthsInRange.forEach(ym => { monthValueMap[ym] = 0; });
       records.forEach(r => {
@@ -1731,16 +1915,66 @@
       const mStartStr = formatMonthLabel(document.getElementById('filterMesStart').value);
       const mEndStr = formatMonthLabel(document.getElementById('filterMesEnd').value);
 
-      document.getElementById('accSummaryName').innerText = accountName;
-      document.getElementById('accSummaryName').title = accountName;
+      document.getElementById('lblAccSummaryName').innerText = `${selectedSearchLevel} Selecionado(a)`;
+      document.getElementById('accSummaryName').innerText = itemName;
+      document.getElementById('accSummaryName').title = itemName;
       document.getElementById('accSummaryClass').innerText = classStr;
       document.getElementById('accSummaryPeriod').innerText = `${mStartStr} a ${mEndStr}`;
       document.getElementById('accSummaryTotal').innerText = fmtR(totalVal);
       document.getElementById('accSummaryAvg').innerText = fmtR(avgVal);
       document.getElementById('accSummaryMax').innerText = fmtR(maxVal);
 
-      // 2. Gráfico da Conta
-      document.getElementById('accChartTitle').innerText = `Evolução Mensal — ${accountName}`;
+      // IDENTIFICAÇÃO HIERÁRQUICA E MAIOR CONTA ANALÍTICA (AJUSTE 1.2 REQUISITADO)
+      const badgeEl = document.getElementById('accHierarchyBadge');
+      let badgeHtml = '';
+
+      if (selectedSearchLevel === "Plano de Contas" || selectedSearchLevel === "Categoria") {
+        // Agrupa por Conta Analítica / SubPlano de Contas dentro do universo de registros pesquisados
+        const analiticaMap = {};
+        records.forEach(r => {
+          const accName = (r['SubPlano de Contas'] || r['Plano de Contas'] || 'Não identificada').toString().trim();
+          if (accName && accName !== '-' && accName !== 'null') {
+            analiticaMap[accName] = (analiticaMap[accName] || 0) + r.Valor;
+          }
+        });
+
+        const sortedAnalitica = Object.keys(analiticaMap).sort((a, b) => {
+          if (analiticaMap[b] !== analiticaMap[a]) {
+            return analiticaMap[b] - analiticaMap[a]; // Maior valor primeiro
+          }
+          return a.localeCompare(b, 'pt-BR'); // Critério determinístico alfabético
+        });
+
+        if (sortedAnalitica.length > 0) {
+          const topAccName = sortedAnalitica[0];
+          const topAccVal = analiticaMap[topAccName];
+          badgeHtml = `<span class="text-blue-700 font-bold bg-blue-50 px-2 py-0.5 rounded border border-blue-200">
+            <i class="fa-solid fa-star text-amber-500 mr-1"></i>Maior Conta Analítica: <strong>${topAccName}</strong> — ${fmtR(topAccVal)}
+          </span>`;
+        } else {
+          badgeHtml = `<span class="text-slate-500">Maior Conta Analítica: -</span>`;
+        }
+      } else if (selectedSearchLevel === "Conta Analítica") {
+        if (sampleRecord['Plano de Contas'] && sampleRecord['Plano de Contas'] !== '-') {
+          badgeHtml += `<span><strong>Plano:</strong> ${sampleRecord['Plano de Contas']}</span>`;
+        }
+        if (sampleRecord.SubCategoria && sampleRecord.SubCategoria !== '-') {
+          if (badgeHtml) badgeHtml += `<span>•</span>`;
+          badgeHtml += `<span><strong>SubCat:</strong> ${sampleRecord.SubCategoria}</span>`;
+        }
+        if (sampleRecord.Categoria && sampleRecord.Categoria !== '-') {
+          if (badgeHtml) badgeHtml += `<span>•</span>`;
+          badgeHtml += `<span><strong>Cat:</strong> ${sampleRecord.Categoria}</span>`;
+        }
+      } else if (selectedSearchLevel === "SubCategoria") {
+        if (sampleRecord.Categoria && sampleRecord.Categoria !== '-') {
+          badgeHtml += `<span><strong>Categoria:</strong> ${sampleRecord.Categoria}</span>`;
+        }
+      }
+      badgeEl.innerHTML = badgeHtml;
+
+      // 2. Gráfico do Nível
+      document.getElementById('accChartTitle').innerText = `Evolução Mensal — ${itemName}`;
       const chartLabels = monthsInRange.map(ym => formatMonthLabel(ym));
       const chartData = monthsInRange.map(ym => monthValueMap[ym]);
 
@@ -1768,7 +2002,15 @@
         }
       });
 
-      // 3. Tabela de Lançamentos da Conta (Ordenada por Data: mais antigo -> mais recente)
+      // 3. Tabela de Lançamentos (Ajusta o título dinamicamente)
+      const tableTitleEl = document.getElementById('accTableTitle');
+      if (selectedSearchLevel === "Conta Analítica") {
+        tableTitleEl.innerText = "Lançamentos da Conta no Período";
+      } else {
+        tableTitleEl.innerText = `Lançamentos — ${itemName}`;
+      }
+
+      // Ordenação de Lançamentos: Data mais antiga -> mais recente
       const sortedRecords = [...records].sort((a, b) => {
         const dateA = parseDateToISO(a.Data);
         const dateB = parseDateToISO(b.Data);
@@ -2062,7 +2304,7 @@
           const dl = getCatValues('DL');
 
           o_tot = (rb.o_tot - ded.o_tot - cmv.o_tot) - dop.o_tot - dadm.o_tot - imp.o_tot + rfin.o_tot + oute.o_tot - dfin.o_tot - ir.o_tot - dl.o_tot;
-          r_acum = (rb.r_acum - ded.r_acum - cmv.r_acum) - dop.r_acum - dadm.r_acum - imp.r_acum + rfin.r_acum + oute.r_acum - dfin.r_acum - ir.r_acum - dl.r_acum;
+          r_acum = (rb.r_acum - ded.r_acum - cmv.r_acum) - dop.r_acum - dadm.r_acum - imp.r_acum + rfin.r_acum + oute.r_acum - dfin.r_acum - ir.r_acum;
           est_rest = (rb.est_rest - ded.est_rest - cmv.est_rest) - dop.est_rest - dadm.est_rest - imp.est_rest + rfin.est_rest + oute.est_rest - dfin.est_rest - ir.est_rest - dl.est_rest;
           proj_tot = r_acum + est_rest;
         }
@@ -2145,6 +2387,114 @@
       });
 
       document.getElementById('bodyMonthlyMatrix').innerHTML = bodyHtml;
+    }
+
+    // TELA 6 — ESTRUTURA DO PLANO DE CONTAS (NOVA HIERARQUIA)
+    function updatePlanoContasTable() {
+      const emp = document.getElementById('filterEmpresa').value;
+      const filteredReal = RAW_REAL.filter(d => (emp === 'TODAS' || d.Empresa === emp));
+
+      // Mapeamento Hierárquico: Classificação -> Categoria -> SubCategoria -> Plano de Contas -> Conta Analítica
+      const tree = {};
+
+      filteredReal.forEach(item => {
+        const cls = (item.Classificação || 'Outros').toString().trim();
+        const cat = (item.Categoria || 'Geral').toString().trim();
+        const subCat = (item.SubCategoria || 'Geral').toString().trim();
+        const plano = (item['Plano de Contas'] || 'Não Definido').toString().trim();
+        const analitica = (item['SubPlano de Contas'] || item['Plano de Contas'] || 'Conta Geral').toString().trim();
+
+        if (!tree[cls]) tree[cls] = {};
+        if (!tree[cls][cat]) tree[cls][cat] = {};
+        if (!tree[cls][cat][subCat]) tree[cls][cat][subCat] = {};
+        if (!tree[cls][cat][subCat][plano]) tree[cls][cat][subCat][plano] = new Set();
+        
+        tree[cls][cat][subCat][plano].add(analitica);
+      });
+
+      let html = '';
+      let idCount = 0;
+
+      const sortedClasses = Object.keys(tree).sort((a, b) => a.localeCompare(b, 'pt-BR'));
+
+      sortedClasses.forEach(cls => {
+        const clsId = `pc-cls-${++idCount}`;
+        html += `<tr class="bg-slate-800 text-white font-bold">
+          <td class="py-2.5 px-4 flex items-center gap-2">
+            <button onclick="toggleRowExp('${clsId}')" class="w-4 h-4 rounded bg-slate-700 hover:bg-slate-600 text-white flex items-center justify-center text-[10px]"><i id="icon-${clsId}" class="fa-solid fa-plus"></i></button>
+            <span><i class="fa-solid fa-folder text-amber-400 mr-1.5"></i>Classe: ${cls}</span>
+          </td>
+          <td class="py-2.5 px-4 text-center"><span class="px-2 py-0.5 rounded bg-slate-700 text-slate-200 text-[10px] font-bold">Nível 1</span></td>
+        </tr>`;
+
+        const sortedCats = Object.keys(tree[cls]).sort((a, b) => a.localeCompare(b, 'pt-BR'));
+        sortedCats.forEach(cat => {
+          const catId = `pc-cat-${++idCount}`;
+          html += `<tr data-parent="${clsId}" class="hidden bg-slate-100 font-semibold text-slate-800">
+            <td class="py-2 pl-8 pr-4 flex items-center gap-2">
+              <button onclick="toggleRowExp('${catId}')" class="w-4 h-4 rounded bg-slate-300 hover:bg-slate-400 text-slate-800 flex items-center justify-center text-[10px]"><i id="icon-${catId}" class="fa-solid fa-plus"></i></button>
+              <span><i class="fa-solid fa-layer-group text-blue-500 mr-1.5"></i>Categoria: ${cat}</span>
+            </td>
+            <td class="py-2 px-4 text-center"><span class="px-2 py-0.5 rounded bg-slate-200 text-slate-700 text-[10px] font-bold">Nível 2</span></td>
+          </tr>`;
+
+          const sortedSubCats = Object.keys(tree[cls][cat]).sort((a, b) => a.localeCompare(b, 'pt-BR'));
+          sortedSubCats.forEach(subCat => {
+            const subCatId = `pc-subcat-${++idCount}`;
+            html += `<tr data-parent="${catId}" class="hidden bg-slate-50 font-medium text-slate-700">
+              <td class="py-1.5 pl-12 pr-4 flex items-center gap-2">
+                <button onclick="toggleRowExp('${subCatId}')" class="w-4 h-4 rounded bg-slate-200 hover:bg-slate-300 text-slate-700 flex items-center justify-center text-[10px]"><i id="icon-${subCatId}" class="fa-solid fa-plus"></i></button>
+                <span><i class="fa-solid fa-sitemap text-indigo-500 mr-1.5"></i>SubCategoria: ${subCat}</span>
+              </td>
+              <td class="py-1.5 px-4 text-center"><span class="px-2 py-0.5 rounded bg-slate-200 text-slate-600 text-[10px]">Nível 3</span></td>
+            </tr>`;
+
+            const sortedPlanos = Object.keys(tree[cls][cat][subCat]).sort((a, b) => a.localeCompare(b, 'pt-BR'));
+            sortedPlanos.forEach(plano => {
+              const planoId = `pc-plano-${++idCount}`;
+              html += `<tr data-parent="${subCatId}" class="hidden bg-white text-slate-800 font-semibold">
+                <td class="py-1.5 pl-16 pr-4 flex items-center gap-2">
+                  <button onclick="toggleRowExp('${planoId}')" class="w-4 h-4 rounded bg-slate-100 hover:bg-slate-200 text-slate-600 flex items-center justify-center text-[10px]"><i id="icon-${planoId}" class="fa-solid fa-plus"></i></button>
+                  <span><i class="fa-solid fa-file-lines text-emerald-600 mr-1.5"></i>Plano de Contas: ${plano}</span>
+                </td>
+                <td class="py-1.5 px-4 text-center"><span class="px-2 py-0.5 rounded bg-slate-100 text-slate-600 text-[10px]">Nível 4</span></td>
+              </tr>`;
+
+              const sortedAnaliticas = Array.from(tree[cls][cat][subCat][plano]).sort((a, b) => a.localeCompare(b, 'pt-BR'));
+              sortedAnaliticas.forEach(analitica => {
+                html += `<tr data-parent="${planoId}" class="hidden bg-slate-50/50 text-slate-600 italic text-[11px]">
+                  <td class="py-1 pl-20 pr-4">
+                    <span>└ <i class="fa-solid fa-tag text-slate-400 mr-1"></i>Conta Analítica: <strong>${analitica}</strong></span>
+                  </td>
+                  <td class="py-1 px-4 text-center not-italic"><span class="px-2 py-0.5 rounded bg-blue-50 text-blue-600 text-[10px] font-semibold">Conta Analítica</span></td>
+                </tr>`;
+              });
+            });
+          });
+        });
+      });
+
+      document.getElementById('tablePlanoContasBody').innerHTML = html || '<tr><td colspan="2" class="text-center py-4 text-slate-400">Nenhum plano de contas encontrado</td></tr>';
+    }
+
+    function expandAllPlanoContas() {
+      const rows = document.querySelectorAll('#tablePlanoContasBody tr[data-parent]');
+      rows.forEach(r => r.classList.remove('hidden'));
+      const icons = document.querySelectorAll('#tablePlanoContasBody i.fa-plus');
+      icons.forEach(i => {
+        i.classList.remove('fa-plus');
+        i.classList.add('fa-minus');
+      });
+    }
+
+    function collapseAllPlanoContas() {
+      const rows = document.querySelectorAll('#tablePlanoContasBody tr[data-parent]');
+      rows.forEach(r => r.classList.add('hidden'));
+      const icons = document.querySelectorAll('#tablePlanoContasBody i.fa-minus');
+      icons.forEach(i => {
+        i.classList.remove('fa-minus');
+        i.classList.add('fa-plus');
+      });
     }
 
     // GRÁFICOS
@@ -2373,6 +2723,459 @@
       });
     }
 
+    // ============================================================
+    // RECURSOS EXCLUSIVOS DE IMPRESSÃO / EXPORTAÇÃO EXCEL
+    // ============================================================
+
+    // UTILITÁRIO GERAL DE IMPRESSÃO DE ELEMENTO ISOLADO
+    function printElement(elementId, title) {
+      const el = document.getElementById(elementId);
+      if (!el) return;
+
+      const emp = document.getElementById('filterEmpresa').value;
+      const mStart = formatMonthLabel(document.getElementById('filterMesStart').value);
+      const mEnd = formatMonthLabel(document.getElementById('filterMesEnd').value);
+
+      const headerHtml = `<div class="mb-6 pb-4 border-b border-slate-300">
+        <h2 class="text-xl font-bold text-slate-900">${title}</h2>
+        <p class="text-xs text-slate-600">Empresa: <strong>${emp}</strong> | Período: <strong>${mStart} a ${mEnd}</strong></p>
+      </div>`;
+
+      const isolatedContainer = document.getElementById('print-isolated-container');
+      
+      // Se houver botões no elemento clonado, o CSS no-print cuidará de ocultá-los
+      isolatedContainer.innerHTML = headerHtml + el.outerHTML;
+      
+      document.body.classList.add('printing-isolated');
+      window.print();
+      
+      setTimeout(() => {
+        document.body.classList.remove('printing-isolated');
+        isolatedContainer.innerHTML = '';
+      }, 500);
+    }
+
+    function printPage(pageId, pageTitle) {
+      printElement(pageId, pageTitle);
+    }
+
+    // IMPRESSÃO DE GRÁFICO DA PESQUISA GERENCIAL (REQ 4)
+    function printAccountGraph() {
+      const emp = document.getElementById('filterEmpresa').value;
+      const mStart = formatMonthLabel(document.getElementById('filterMesStart').value);
+      const mEnd = formatMonthLabel(document.getElementById('filterMesEnd').value);
+
+      const tot = document.getElementById('accSummaryTotal').innerText;
+      const avg = document.getElementById('accSummaryAvg').innerText;
+      const max = document.getElementById('accSummaryMax').innerText;
+      const badgeText = document.getElementById('accHierarchyBadge').innerText;
+
+      const headerHtml = `<div class="mb-6 pb-4 border-b border-slate-300">
+        <h2 class="text-xl font-bold text-slate-900">Análise de Evolução Mensal</h2>
+        <p class="text-sm text-slate-700">Item Pesquisado: <strong>${selectedAccountName}</strong> (${selectedSearchLevel})</p>
+        <p class="text-xs text-slate-600">Empresa: <strong>${emp}</strong> | Período: <strong>${mStart} a ${mEnd}</strong></p>
+        <div class="mt-3 p-3 bg-slate-100 rounded text-xs space-y-1">
+          <p><strong>Total Realizado:</strong> ${tot} | <strong>Média Mensal:</strong> ${avg} | <strong>Maior Mês:</strong> ${max}</p>
+          ${badgeText ? `<p class="text-[11px] text-slate-500">${badgeText}</p>` : ''}
+        </div>
+      </div>`;
+
+      const canvas = document.getElementById('chartAccountEvolution');
+      const imgData = canvas.toDataURL('image/png');
+
+      const chartHtml = `<div class="text-center">
+        <img src="${imgData}" style="max-width: 100%; height: auto; margin: 0 auto;" />
+      </div>`;
+
+      const isolatedContainer = document.getElementById('print-isolated-container');
+      isolatedContainer.innerHTML = headerHtml + chartHtml;
+      
+      document.body.classList.add('printing-isolated');
+      window.print();
+      
+      setTimeout(() => {
+        document.body.classList.remove('printing-isolated');
+        isolatedContainer.innerHTML = '';
+      }, 500);
+    }
+
+    // IMPRESSÃO COMPLETA DE TABELA DE PESQUISA (REQ 5.1)
+    function printSearchTable() {
+      const filtered = getFilteredData();
+      const targetField = getTargetFieldName(selectedSearchLevel);
+
+      const records = filtered.real.filter(d => {
+        let val = d[targetField];
+        if (!val && targetField === "SubPlano de Contas") val = d.Categoria;
+        return val && val.toString().trim() === selectedAccountName;
+      });
+
+      records.sort((a, b) => parseDateToISO(a.Data).localeCompare(parseDateToISO(b.Data)));
+
+      const emp = document.getElementById('filterEmpresa').value;
+      const mStart = formatMonthLabel(document.getElementById('filterMesStart').value);
+      const mEnd = formatMonthLabel(document.getElementById('filterMesEnd').value);
+
+      let tableRows = '';
+      records.forEach(r => {
+        tableRows += `<tr>
+          <td style="border: 1px solid #ddd; padding: 6px;">${r.ID || '-'}</td>
+          <td style="border: 1px solid #ddd; padding: 6px;">${r.Empresa || '-'}</td>
+          <td style="border: 1px solid #ddd; padding: 6px;">${r.Data || '-'}</td>
+          <td style="border: 1px solid #ddd; padding: 6px;">${formatMonthLabel(r.YearMonth) || '-'}</td>
+          <td style="border: 1px solid #ddd; padding: 6px;">${r['Plano de Contas'] || '-'}</td>
+          <td style="border: 1px solid #ddd; padding: 6px;">${r['SubPlano de Contas'] || '-'}</td>
+          <td style="border: 1px solid #ddd; padding: 6px; text-align: right;">${fmtR(r.Valor)}</td>
+          <td style="border: 1px solid #ddd; padding: 6px;">${r.Classificação || '-'}</td>
+          <td style="border: 1px solid #ddd; padding: 6px;">${r.Categoria || '-'}</td>
+          <td style="border: 1px solid #ddd; padding: 6px;">${r.SubCategoria || '-'}</td>
+        </tr>`;
+      });
+
+      const fullHtml = `<div class="mb-4">
+        <h2 style="font-size: 16pt; font-weight: bold; margin-bottom: 4px;">Relatório de Lançamentos — Pesquisa Gerencial</h2>
+        <p style="font-size: 10pt; color: #555;">Item: <strong>${selectedAccountName}</strong> (${selectedSearchLevel}) | Empresa: <strong>${emp}</strong> | Período: <strong>${mStart} a ${mEnd}</strong></p>
+      </div>
+      <table style="width: 100%; border-collapse: collapse; font-size: 9pt;">
+        <thead>
+          <tr style="background-color: #1e293b; color: white;">
+            <th style="border: 1px solid #ddd; padding: 6px;">ID</th>
+            <th style="border: 1px solid #ddd; padding: 6px;">Empresa</th>
+            <th style="border: 1px solid #ddd; padding: 6px;">Data</th>
+            <th style="border: 1px solid #ddd; padding: 6px;">Mês</th>
+            <th style="border: 1px solid #ddd; padding: 6px;">Plano de Contas</th>
+            <th style="border: 1px solid #ddd; padding: 6px;">SubPlano</th>
+            <th style="border: 1px solid #ddd; padding: 6px; text-align: right;">Valor (R$)</th>
+            <th style="border: 1px solid #ddd; padding: 6px;">Classificação</th>
+            <th style="border: 1px solid #ddd; padding: 6px;">Categoria</th>
+            <th style="border: 1px solid #ddd; padding: 6px;">SubCategoria</th>
+          </tr>
+        </thead>
+        <tbody>${tableRows}</tbody>
+      </table>`;
+
+      const isolatedContainer = document.getElementById('print-isolated-container');
+      isolatedContainer.innerHTML = fullHtml;
+      
+      document.body.classList.add('printing-isolated');
+      window.print();
+      
+      setTimeout(() => {
+        document.body.classList.remove('printing-isolated');
+        isolatedContainer.innerHTML = '';
+      }, 500);
+    }
+
+    // UTILITÁRIO EXPORTAÇÃO EXCEL (SheetJS)
+    function exportToExcel(dataObjects, fileName, sheetName = "Dados") {
+      if (!dataObjects || dataObjects.length === 0) {
+        alert("Não há dados para exportar.");
+        return;
+      }
+      const ws = XLSX.utils.json_to_sheet(dataObjects);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, sheetName);
+      XLSX.writeFile(wb, `${fileName}.xlsx`);
+    }
+
+    // EXPORTAÇÃO EXCEL DA PESQUISA GERENCIAL (REQ 5.2)
+    function exportSearchTableToExcel() {
+      const filtered = getFilteredData();
+      const targetField = getTargetFieldName(selectedSearchLevel);
+
+      const records = filtered.real.filter(d => {
+        let val = d[targetField];
+        if (!val && targetField === "SubPlano de Contas") val = d.Categoria;
+        return val && val.toString().trim() === selectedAccountName;
+      });
+
+      records.sort((a, b) => parseDateToISO(a.Data).localeCompare(parseDateToISO(b.Data)));
+
+      const exportData = records.map(r => ({
+        "ID": r.ID || '',
+        "Empresa": r.Empresa || '',
+        "Data": r.Data || '',
+        "Mês": r.MesStr || r.YearMonth || '',
+        "Plano de Contas": r['Plano de Contas'] || '',
+        "SubPlano de Contas": r['SubPlano de Contas'] || '',
+        "Valor (R$)": r.Valor, // Valor numérico mantido
+        "Classificação": r.Classificação || '',
+        "Categoria": r.Categoria || '',
+        "SubCategoria": r.SubCategoria || '',
+        "Tipo": r.Tipo || 'Realizado'
+      }));
+
+      const safeName = (selectedAccountName || "Pesquisa").replace(/[^a-zA-Z0-9_-]/g, "_");
+      exportToExcel(exportData, `Lancamentos_${safeName}`, "Lançamentos");
+    }
+
+    // EXPORTAÇÃO EXCEL DA ANÁLISE DE CATEGORIAS (REQ 6)
+    function exportCategoriasToExcel() {
+      const filtered = getFilteredData();
+      const filterClass = document.getElementById('filterClassificacao').value;
+
+      let records = filtered.real;
+      if (filterClass !== 'TODAS') {
+        records = records.filter(d => d.Classificação === filterClass);
+      }
+
+      records.sort((a, b) => parseDateToISO(a.Data).localeCompare(parseDateToISO(b.Data)));
+
+      const exportData = records.map(r => ({
+        "ID": r.ID || '',
+        "Empresa": r.Empresa || '',
+        "Data": r.Data || '',
+        "Mês": r.MesStr || r.YearMonth || '',
+        "Classificação": r.Classificação || '',
+        "Categoria": r.Categoria || '',
+        "SubCategoria": r.SubCategoria || '',
+        "Plano de Contas": r['Plano de Contas'] || '',
+        "SubPlano de Contas": r['SubPlano de Contas'] || '',
+        "Valor (R$)": r.Valor
+      }));
+
+      exportToExcel(exportData, "Análise_de_Categorias_Lancamentos", "Base Lançamentos");
+    }
+
+    // EXPORTAÇÕES EXCEL DO FLUXO DE CAIXA (REQ 7)
+    function exportDFCMonthlyToExcel() {
+      const filtered = getFilteredData();
+      const months = getMonthsInRange();
+
+      const lines = [
+        { label: '(+) ENTRADAS DE CAIXA', isEntrada: true },
+        { label: '(-) SAÍDAS DE CAIXA', isSaida: true },
+        { label: '(=) GERAÇÃO LÍQUIDA DE CAIXA', isGeracao: true }
+      ];
+
+      const exportRows = lines.map(line => {
+        const row = { "Linha de Caixa": line.label };
+        let total = 0;
+
+        months.forEach(ym => {
+          const colLabel = formatMonthLabel(ym);
+          if (!REAL_MONTHS_SET.has(ym)) {
+            row[colLabel] = 0;
+          } else {
+            let val = 0;
+            if (line.isEntrada) {
+              val = filtered.real.filter(d => d.Classificação === 'Receita' && d.YearMonth === ym).reduce((a,b) => a+b.Valor, 0);
+            } else if (line.isSaida) {
+              val = filtered.real.filter(d => (d.Classificação === 'Custo' || d.Classificação === 'Despesa') && d.YearMonth === ym).reduce((a,b) => a+b.Valor, 0);
+            } else if (line.isGeracao) {
+              const ent = filtered.real.filter(d => d.Classificação === 'Receita' && d.YearMonth === ym).reduce((a,b) => a+b.Valor, 0);
+              const sai = filtered.real.filter(d => (d.Classificação === 'Custo' || d.Classificação === 'Despesa') && d.YearMonth === ym).reduce((a,b) => a+b.Valor, 0);
+              val = ent - sai;
+            }
+            total += val;
+            row[colLabel] = val;
+          }
+        });
+
+        row["Total Período"] = total;
+        return row;
+      });
+
+      exportToExcel(exportRows, "Fluxo_de_Caixa_Mensal", "DFC Mensal");
+    }
+
+    function exportDFCHierarchicalToExcel() {
+      const filtered = getFilteredData();
+      const exportRows = [];
+
+      // Entradas
+      const totEntradas = filtered.real.filter(d => d.Classificação === 'Receita').reduce((a,b)=>a+b.Valor,0);
+      exportRows.push({ "Tipo": "ENTRADA", "Categoria": "TOTAL ENTRADAS", "SubPlano": "-", "Valor (R$)": totEntradas, "Representatividade (%)": "100.0%" });
+
+      const catEntradasMap = {};
+      filtered.real.filter(d => d.Classificação === 'Receita').forEach(d => {
+        const cat = d.Categoria || 'Outros';
+        const sub = d['SubPlano de Contas'] || d.SubCategoria || 'Geral';
+        if (!catEntradasMap[cat]) catEntradasMap[cat] = { total: 0, subs: {} };
+        catEntradasMap[cat].total += d.Valor;
+        catEntradasMap[cat].subs[sub] = (catEntradasMap[cat].subs[sub] || 0) + d.Valor;
+      });
+
+      Object.keys(catEntradasMap).forEach(c => {
+        const cVal = catEntradasMap[c].total;
+        const cPct = totEntradas > 0 ? (cVal / totEntradas * 100).toFixed(1) + '%' : '0.0%';
+        exportRows.push({ "Tipo": "ENTRADA", "Categoria": c, "SubPlano": "TOTAL CATEGORIA", "Valor (R$)": cVal, "Representatividade (%)": cPct });
+
+        Object.keys(catEntradasMap[c].subs).forEach(s => {
+          const sVal = catEntradasMap[c].subs[s];
+          const sPct = totEntradas > 0 ? (sVal / totEntradas * 100).toFixed(1) + '%' : '0.0%';
+          exportRows.push({ "Tipo": "ENTRADA", "Categoria": c, "SubPlano": s, "Valor (R$)": sVal, "Representatividade (%)": sPct });
+        });
+      });
+
+      // Saídas
+      const totSaidas = filtered.real.filter(d => d.Classificação === 'Custo' || d.Classificação === 'Despesa').reduce((a,b)=>a+b.Valor,0);
+      exportRows.push({ "Tipo": "SAÍDA", "Categoria": "TOTAL SAÍDAS", "SubPlano": "-", "Valor (R$)": totSaidas, "Representatividade (%)": "100.0%" });
+
+      const catSaidasMap = {};
+      filtered.real.filter(d => d.Classificação === 'Custo' || d.Classificação === 'Despesa').forEach(d => {
+        const cat = d.Categoria || 'Outros';
+        const sub = d['SubPlano de Contas'] || d.SubCategoria || 'Geral';
+        if (!catSaidasMap[cat]) catSaidasMap[cat] = { total: 0, subs: {} };
+        catSaidasMap[cat].total += d.Valor;
+        catSaidasMap[cat].subs[sub] = (catSaidasMap[cat].subs[sub] || 0) + d.Valor;
+      });
+
+      Object.keys(catSaidasMap).forEach(c => {
+        const cVal = catSaidasMap[c].total;
+        const cPct = totSaidas > 0 ? (cVal / totSaidas * 100).toFixed(1) + '%' : '0.0%';
+        exportRows.push({ "Tipo": "SAÍDA", "Categoria": c, "SubPlano": "TOTAL CATEGORIA", "Valor (R$)": cVal, "Representatividade (%)": cPct });
+
+        Object.keys(catSaidasMap[c].subs).forEach(s => {
+          const sVal = catSaidasMap[c].subs[s];
+          const sPct = totSaidas > 0 ? (sVal / totSaidas * 100).toFixed(1) + '%' : '0.0%';
+          exportRows.push({ "Tipo": "SAÍDA", "Categoria": c, "SubPlano": s, "Valor (R$)": sVal, "Representatividade (%)": sPct });
+        });
+      });
+
+      exportToExcel(exportRows, "Fluxo_de_Caixa_Hierarquico", "DFC Hierárquico");
+    }
+
+    function exportDFCDailyToExcel() {
+      const filtered = getFilteredData();
+      const startDate = document.getElementById('dailyDateStart').value;
+      const endDate = document.getElementById('dailyDateEnd').value;
+
+      let realList = filtered.real.map(d => ({ ...d, IsoDate: parseDateToISO(d.Data) }));
+      if (startDate) realList = realList.filter(d => d.IsoDate >= startDate);
+      if (endDate) realList = realList.filter(d => d.IsoDate <= endDate);
+
+      realList.sort((a, b) => parseDateToISO(a.Data).localeCompare(parseDateToISO(b.Data)));
+
+      const exportRows = realList.map(r => ({
+        "ID": r.ID || '',
+        "Empresa": r.Empresa || '',
+        "Data": r.Data || '',
+        "Classificação": r.Classificação || '',
+        "Categoria": r.Categoria || '',
+        "SubCategoria": r.SubCategoria || '',
+        "Plano de Contas": r['Plano de Contas'] || '',
+        "SubPlano de Contas": r['SubPlano de Contas'] || '',
+        "Valor (R$)": r.Valor
+      }));
+
+      exportToExcel(exportRows, "Visao_Diaria_de_Caixa", "Lançamentos Diários");
+    }
+
+    // EXPORTAÇÃO EXCEL DRE GERENCIAL DETALHADA (REQ 9)
+    function exportDREToExcel() {
+      const filtered = getFilteredData();
+      const m = computeDREMetrics(filtered);
+
+      const rows = [
+        { id: 'rb', label: 'RECEITA BRUTA DE VENDAS E SERVIÇOS', cat: 'Receita Bruta de Vendas e Serviços', o: m.rb.o, r: m.rb.r, isRec: true },
+        { id: 'ded', label: '(-) DEDUÇÕES DA RECEITA', cat: 'Deduções', o: m.ded.o, r: m.ded.r, isRec: false },
+        { id: 'rl', label: '(=) RECEITA LÍQUIDA', o: m.rl.o, r: m.rl.r, isRec: true },
+        { id: 'cmv', label: '(-) CUSTOS DAS MERCADORIAS E SERVIÇOS (CMV/CSP)', cat: 'CMV/CSP', o: m.cmv.o, r: m.cmv.r, isRec: false },
+        { id: 'lb', label: '(=) LUCRO BRUTO', o: m.lb.o, r: m.lb.r, isRec: true },
+        { id: 'dop', label: '(-) DESPESAS OPERACIONAIS', cat: 'Despesas Operacionais', o: m.dop.o, r: m.dop.r, isRec: false },
+        { id: 'dadm', label: '(-) DESPESAS ADMINISTRATIVAS', cat: 'Despesas Administrativas', o: m.dadm.o, r: m.dadm.r, isRec: false },
+        { id: 'imp', label: '(-) IMPOSTOS OPERACIONAIS', cat: 'Impostos', o: m.imp.o, r: m.imp.r, isRec: false },
+        { id: 'ebitda', label: '(=) EBITDA OPERACIONAL', o: m.ebitda.o, r: m.ebitda.r, isRec: true },
+        { id: 'rfin', label: '(+) RECEITAS FINANCEIRAS', cat: 'Receitas Financeiras', o: m.rfin.o, r: m.rfin.r, isRec: true },
+        { id: 'oute', label: '(+) OUTRAS RECEITAS', cat: 'Outras Receitas', o: m.oute.o, r: m.oute.r, isRec: true },
+        { id: 'dfin', label: '(-) DESPESAS FINANCEIRAS', cat: 'Despesas Financeiras', o: m.dfin.o, r: m.dfin.r, isRec: false },
+        { id: 'lair', label: '(=) RESULTADO ANTES DOS TRIBUTOS (LAIR)', o: m.lair.o, r: m.lair.r, isRec: true },
+        { id: 'ir', label: '(-) IRPJ / CSLL', cat: 'IRPJ/CSLL', o: m.ir.o, r: m.ir.r, isRec: false },
+        { id: 'll', label: '(=) LUCRO LÍQUIDO', o: m.ll.o, r: m.ll.r, isRec: true },
+        { id: 'dl', label: '(-) DISTRIBUIÇÃO DE LUCROS (DL)', cat: 'DL', o: m.dl.o, r: m.dl.r, isRec: false },
+        { id: 'ladl', label: '(=) LUCRO APÓS DISTRIBUIÇÃO DE LUCROS', o: m.ladl.o, r: m.ladl.r, isRec: true }
+      ];
+
+      const exportRows = [];
+
+      rows.forEach(r => {
+        const hasR = m.hasRealized && r.r !== null;
+        const desvioR = hasR ? (r.r - r.o) : 0;
+        const desvioP = (hasR && r.o !== 0) ? (desvioR / r.o) : 0;
+
+        exportRows.push({
+          "Estrutura DRE": r.label,
+          "SubPlano / Conta": "SINTÉTICO",
+          "Orçado (R$)": r.o,
+          "Realizado (R$)": hasR ? r.r : 0,
+          "Desvio (R$)": desvioR,
+          "Desvio (%)": desvioP
+        });
+
+        if (r.cat) {
+          const subMap = {};
+          filtered.orc.filter(d => d.Categoria === r.cat).forEach(d => {
+            const sub = d['SubPlano de Contas'] || d.SubCategoria || 'Geral';
+            if (!subMap[sub]) subMap[sub] = { o: 0, r: 0, hasR: false };
+            subMap[sub].o += d.Valor;
+          });
+          filtered.real.filter(d => d.Categoria === r.cat).forEach(d => {
+            const sub = d['SubPlano de Contas'] || d.SubCategoria || 'Geral';
+            if (!subMap[sub]) subMap[sub] = { o: 0, r: 0, hasR: true };
+            subMap[sub].r += d.Valor;
+            subMap[sub].hasR = true;
+          });
+
+          Object.keys(subMap).forEach(subName => {
+            const item = subMap[subName];
+            const subDesvioR = item.hasR ? (item.r - item.o) : 0;
+            const subDesvioP = (item.hasR && item.o !== 0) ? (subDesvioR / item.o) : 0;
+
+            exportRows.push({
+              "Estrutura DRE": `   └ ${r.cat}`,
+              "SubPlano / Conta": subName,
+              "Orçado (R$)": item.o,
+              "Realizado (R$)": item.hasR ? item.r : 0,
+              "Desvio (R$)": subDesvioR,
+              "Desvio (%)": subDesvioP
+            });
+          });
+        }
+      });
+
+      exportToExcel(exportRows, "DRE_Gerencial_Detalhada", "DRE Detalhada");
+    }
+
+    // EXPORTAÇÃO EXCEL PLANO DE CONTAS (REQ 14)
+    function exportPlanoContasToExcel() {
+      const emp = document.getElementById('filterEmpresa').value;
+      const filteredReal = RAW_REAL.filter(d => (emp === 'TODAS' || d.Empresa === emp));
+
+      const treeSet = new Set();
+      const exportRows = [];
+
+      filteredReal.forEach(item => {
+        const cls = (item.Classificação || 'Outros').toString().trim();
+        const cat = (item.Categoria || 'Geral').toString().trim();
+        const subCat = (item.SubCategoria || 'Geral').toString().trim();
+        const plano = (item['Plano de Contas'] || 'Não Definido').toString().trim();
+        const analitica = (item['SubPlano de Contas'] || item['Plano de Contas'] || 'Conta Geral').toString().trim();
+
+        const uniqueKey = `${cls}||${cat}||${subCat}||${plano}||${analitica}`;
+        if (!treeSet.has(uniqueKey)) {
+          treeSet.add(uniqueKey);
+          exportRows.push({
+            "Classificação": cls,
+            "Categoria": cat,
+            "SubCategoria": subCat,
+            "Plano de Contas": plano,
+            "Conta Analítica / SubPlano": analitica
+          });
+        }
+      });
+
+      exportRows.sort((a,b) => {
+        return a.Classificação.localeCompare(b.Classificação, 'pt-BR') ||
+               a.Categoria.localeCompare(b.Categoria, 'pt-BR') ||
+               a.SubCategoria.localeCompare(b.SubCategoria, 'pt-BR') ||
+               a['Plano de Contas'].localeCompare(b['Plano de Contas'], 'pt-BR') ||
+               a['Conta Analítica / SubPlano'].localeCompare(b['Conta Analítica / SubPlano'], 'pt-BR');
+      });
+
+      exportToExcel(exportRows, "Estrutura_Plano_de_Contas", "Plano de Contas");
+    }
+
     // CARREGAMENTO INICIAL E POPULAÇÃO DINÂMICA DE MESES/EMPRESAS
     window.onload = function() {
       if (!APPS_SCRIPT_URL || APPS_SCRIPT_URL.includes("SEU_WEB_APP_ID")) {
@@ -2409,6 +3212,7 @@
                 Classificação: (r['Classificação'] || '').toString().trim(),
                 Categoria: (r['Categoria'] || '').toString().trim(),
                 SubCategoria: (r['SubCategoria'] || '').toString().trim(),
+                'Plano de Contas': (r['Plano de Contas'] || '').toString().trim(),
                 'SubPlano de Contas': (r['SubPlano de Contas'] || '').toString().trim(),
                 Valor: parseValue(r['Valor']),
                 Tipo: 'Orçado'
@@ -2431,6 +3235,7 @@
                 Classificação: (r['Classificação'] || '').toString().trim(),
                 Categoria: (r['Categoria'] || '').toString().trim(),
                 SubCategoria: (r['SubCategoria'] || '').toString().trim(),
+                'Plano de Contas': (r['Plano de Contas'] || '').toString().trim(),
                 'SubPlano de Contas': (r['SubPlano de Contas'] || '').toString().trim(),
                 Valor: parseValue(r['Valor']),
                 Tipo: 'Realizado'
